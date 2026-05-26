@@ -1,7 +1,6 @@
 """Helpers for calling Supabase Auth REST endpoints using httpx."""
 
 from typing import Any
-from urllib.parse import quote
 
 import httpx
 from fastapi import HTTPException
@@ -294,60 +293,3 @@ async def update_profile_goal_fields(
             "goal_co2e": round(new_co2e, 2),
         },
     )
-
-
-async def list_ingredients_master(access_token: str, name: str | None = None) -> list[dict[str, Any]]:
-    """List master ingredients from Supabase ingredients table."""
-
-    base = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/ingredients"
-    params: dict[str, str] = {
-        "select": "id,name,category,standard_unit,default_shelf_life_days,default_quantity,image_url",
-        "order": "name.asc",
-    }
-    if name and name.strip():
-        safe_name = quote(name.strip(), safe='')
-        params["name"] = f"ilike.*{safe_name}*"
-    headers = {
-        "apikey": settings.SUPABASE_ANON_KEY,
-        "Authorization": f"Bearer {access_token}",
-        "Accept": "application/json",
-    }
-
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(base, headers=headers, params=params)
-
-    if response.status_code >= 400:
-        try:
-            detail = response.json()
-            print(f"[Supabase /ingredients error] status={response.status_code} detail={detail}")
-        except Exception:
-            detail = {"message": response.text}
-            print(f"[Supabase /ingredients error] status={response.status_code} text={response.text}")
-        raise HTTPException(status_code=response.status_code, detail=detail)
-
-    rows = response.json()
-    return rows if isinstance(rows, list) else []
-
-
-async def list_recipes_master(access_token: str) -> list[dict[str, Any]]:
-    """List master recipes from Supabase recipes table."""
-
-    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/recipes?select=recipe_id,title,description,cooking_time_mins,image_url,required_ingredients,instructions&order=title.asc"
-    headers = {
-        "apikey": settings.SUPABASE_ANON_KEY,
-        "Authorization": f"Bearer {access_token}",
-        "Accept": "application/json",
-    }
-
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(url, headers=headers)
-
-    if response.status_code >= 400:
-        try:
-            detail = response.json()
-        except Exception:
-            detail = {"message": response.text}
-        raise HTTPException(status_code=response.status_code, detail=detail)
-
-    rows = response.json()
-    return rows if isinstance(rows, list) else []

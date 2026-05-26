@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useAppState } from '../context/useAppState.ts'
-import { deleteMyFridgeItem, fetchIngredientsMaster, getMyFridgeItems, markItemWasted, updateMyFridgeItem } from '../lib/backendApi.ts'
+import { deleteMyFridgeItem, getMyFridgeItems, markItemWasted, updateMyFridgeItem } from '../lib/backendApi.ts'
 import { formatDateAU } from '../utils/formatters.ts'
 import { ingredientImageUrl } from '../utils/ingredientAssets.ts'
-import IngredientImage from '../components/IngredientImage.jsx'
 import { groupByName } from '../utils/fridgeGrouping.ts'
 import type { FridgeGroup } from '../utils/fridgeGrouping.ts'
 import type { Ingredient } from '../types/models.ts'
@@ -15,10 +14,7 @@ export function MyFridgePage() {
   const [originalSnapshot, setOriginalSnapshot] = useState<Record<string, Ingredient>>({})
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [categoryTab, setCategoryTab] = useState<string>('all')
-  const [masterCategoryByName, setMasterCategoryByName] = useState<Record<string, string>>({})
-  const [masterImageByName, setMasterImageByName] = useState<Record<string, string>>({})
-  const [categoryOptions, setCategoryOptions] = useState<string[]>(['all'])
+  const [categoryTab, setCategoryTab] = useState<'all' | 'veg' | 'meat' | 'dairy' | 'others'>('all')
   const [error, setError] = useState('')
   const stepByUnit = (unit: string) => {
     const u = unit.toLowerCase()
@@ -40,9 +36,12 @@ export function MyFridgePage() {
   }
 
   const tabMatch = (name: string) => {
+    const n = name.toLowerCase()
     if (categoryTab === 'all') return true
-    const resolved = masterCategoryByName[name.toLowerCase()] ?? 'General'
-    return resolved.toLowerCase() === categoryTab.toLowerCase()
+    if (categoryTab === 'veg') return ['spinach', 'tomato', 'broccoli', 'carrot', 'onion', 'capsicum', 'zucchini', 'cucumber', 'lettuce', 'cauliflower', 'eggplant', 'mushroom', 'corn', 'peas', 'beans', 'chickpeas', 'potato', 'sweet potato'].some((x) => n.includes(x))
+    if (categoryTab === 'meat') return ['chicken', 'beef', 'pork', 'fish', 'shrimp', 'tofu'].some((x) => n.includes(x))
+    if (categoryTab === 'dairy') return ['milk', 'yogurt', 'cheese', 'butter', 'egg'].some((x) => n.includes(x))
+    return true
   }
 
   // Build groups from inventory, then apply search + category filter
@@ -54,21 +53,6 @@ export function MyFridgePage() {
     const run = async () => {
       if (!authSession?.accessToken) return
       try {
-        const master = await fetchIngredientsMaster()
-        const byName: Record<string, string> = {}
-        const imageByName: Record<string, string> = {}
-        const cats = new Set<string>()
-        master.forEach((m) => {
-          const nm = (m.name ?? '').toLowerCase()
-          const cat = m.category ?? 'General'
-          if (nm) byName[nm] = cat
-          if (nm && m.image_url) imageByName[nm] = m.image_url
-          cats.add(cat)
-        })
-        setMasterCategoryByName(byName)
-        setMasterImageByName(imageByName)
-        setCategoryOptions(['all', ...Array.from(cats).sort((a, b) => a.localeCompare(b))])
-
         const rows = await getMyFridgeItems(authSession.accessToken)
         const mapped: Ingredient[] = rows.map((row) => ({
           id: row.id,
@@ -76,8 +60,7 @@ export function MyFridgePage() {
           icon: '🥗',
           quantity: row.quantity,
           unit: row.unit,
-          category: byName[row.ingredient.toLowerCase()] ?? row.category ?? 'General',
-          image_url: imageByName[row.ingredient.toLowerCase()] ?? '',
+          category: row.category ?? 'General',
           purchaseDate: row.created_at ? row.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
           expiryDate: row.expiry_date,
           source: 'quick-add',
@@ -171,8 +154,8 @@ export function MyFridgePage() {
         <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
           <input className="rounded-2xl border border-slate-200 bg-white px-4 py-3 transition-colors duration-150" placeholder="Search ingredients..." value={search} onChange={(e) => setSearch(e.target.value)} />
           <div className="flex flex-wrap gap-2">
-            {categoryOptions.map((tab) => (
-              <button key={tab} className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-200 ${categoryTab === tab ? 'border-emerald-500 bg-emerald-100 text-emerald-800 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`} onClick={() => setCategoryTab(tab)}>{tab === 'all' ? 'All' : tab}</button>
+            {(['all', 'veg', 'meat', 'dairy', 'others'] as const).map((tab) => (
+              <button key={tab} className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-200 ${categoryTab === tab ? 'border-emerald-500 bg-emerald-100 text-emerald-800 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`} onClick={() => setCategoryTab(tab)}>{tab === 'all' ? 'All' : tab === 'veg' ? 'Veg' : tab === 'meat' ? 'Meat' : tab === 'dairy' ? 'Dairy' : 'Others'}</button>
             ))}
           </div>
         </div>
@@ -191,9 +174,7 @@ export function MyFridgePage() {
               key={group.name}
               className={`overflow-hidden rounded-3xl border shadow-sm ${isExpired ? 'border-slate-400 bg-slate-300 text-slate-900' : 'glass-card'}`}
             >
-              <div className="h-36 w-full overflow-hidden p-3">
-                <IngredientImage imageUrl={masterImageByName[group.name.toLowerCase()] || ingredientImageUrl(group.name)} name={group.name} />
-              </div>
+              <img src={ingredientImageUrl(group.name)} alt={group.name} className="h-36 w-full object-cover" onError={(e) => { e.currentTarget.src = ingredientImageUrl('fallback') }} />
               <div className={`p-5 ${isExpired ? 'text-slate-900' : ''}`}>
                 <div className="flex items-center justify-between">
                   <h2 className="mt-2 text-xl font-semibold">{group.name}</h2>

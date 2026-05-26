@@ -23,16 +23,10 @@ export interface AuthSession {
 export interface Ingredient {
   id: string
   name: string
-  category: string
-  standard_unit?: string
-  default_shelf_life_days?: number
-  default_quantity?: number
-  image_url?: string
-  expiration_date?: string
-  meal_type?: string
   icon: string
   quantity: number
   unit: string
+  category: string
   purchaseDate: string
   expiryDate: string
   source: 'manual' | 'single-line' | 'quick-add' | 'autocomplete'
@@ -59,13 +53,6 @@ export interface RewardState {
 }
 
 export interface Recipe {
-  recipe_id?: string
-  title?: string
-  description?: string
-  cooking_time_mins?: number
-  image_url?: string
-  required_ingredients?: Array<{ id: string; qty: number; unit: string }>
-  instructions?: string
   id: string
   name: string
   image: string

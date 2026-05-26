@@ -1,6 +1,6 @@
 """FastAPI app exposing auth + profile endpoints."""
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
@@ -30,8 +30,6 @@ from .supabase_auth import (
     update_fridge_item,
     update_profile_goal_fields,
     upsert_user_profile,
-    list_ingredients_master,
-    list_recipes_master,
 )
 
 app = FastAPI(title="Eat It Up Backend", version="0.1.0")
@@ -256,25 +254,3 @@ async def waste_item(item_id: str, authorization: str | None = Header(default=No
         savings_penalty=_SAVINGS_PENALTY,
         co2e_penalty=_CO2E_PENALTY,
     )
-
-
-@app.get("/ingredients", response_model=list[dict])
-async def get_ingredients_master(
-    request: Request,
-    authorization: str | None = Header(default=None),
-    name: str | None = Query(default=None),
-) -> list[dict]:
-    """Expose Supabase ingredients master list as source of truth for frontend."""
-
-    print(f"[GET /ingredients] query={dict(request.query_params)} name={name!r}")
-
-    access_token = _extract_bearer_token(authorization)
-    return await list_ingredients_master(access_token, name=name)
-
-
-@app.get("/recipes", response_model=list[dict])
-async def get_recipes_master(authorization: str | None = Header(default=None)) -> list[dict]:
-    """Expose Supabase recipes master list as source of truth for frontend."""
-
-    access_token = _extract_bearer_token(authorization)
-    return await list_recipes_master(access_token)

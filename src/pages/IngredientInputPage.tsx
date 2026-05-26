@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppState } from '../context/useAppState.ts'
-import { createMyFridgeItem, fetchIngredientsMaster } from '../lib/backendApi.ts'
+import { createMyFridgeItem } from '../lib/backendApi.ts'
 import { recommendExpiryDate } from '../domain/expiry/recommendExpiryDate.ts'
 import { parseIngredientLine } from '../domain/parser/parseIngredientLine.ts'
 import { mergeIngredients } from '../domain/rewards/rewardEngine.ts'
 import type { Ingredient } from '../types/models.ts'
+import { MASTER_INGREDIENTS, toTitleCase, validateIngredientName } from '../utils/ingredientCatalog.ts'
 import { VALID_UNITS, getUnitForIngredient } from '../utils/unitRules.ts'
 import { Button } from '../components/ui/Button.tsx'
 import { Card } from '../components/ui/Card.tsx'
 import { SectionContainer } from '../components/ui/SectionContainer.tsx'
 
 const frequent = ['Milk', 'Eggs', 'Tomatoes', 'Spinach', 'Chicken']
+const options = MASTER_INGREDIENTS.map(toTitleCase)
 const UNIT_OPTIONS = VALID_UNITS
-
-const toTitleCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1).toLowerCase()
 
 const stepByUnit = (unit: string) => {
   const u = unit.toLowerCase()
@@ -37,39 +37,10 @@ export function IngredientInputPage() {
   const [validationWarnings, setValidationWarnings] = useState<string[]>([])
   const [applySuccess, setApplySuccess] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
-  const [ingredientsMaster, setIngredientsMaster] = useState<Array<{ id: string; name: string; category: string; standard_unit: string; default_shelf_life_days: number; default_quantity: number; image_url: string }>>([])
   const navigate = useNavigate()
 
-  useEffect(() => {
-    let active = true
-    const loadMaster = async () => {
-      try {
-        const rows = await fetchIngredientsMaster()
-        if (!active) return
-        setIngredientsMaster(rows.map((r) => ({
-          id: r.id,
-          name: (r.name ?? '').toLowerCase(),
-          category: r.category ?? 'General',
-          standard_unit: r.standard_unit ?? 'ea',
-          default_shelf_life_days: r.default_shelf_life_days ?? 7,
-          default_quantity: r.default_quantity ?? 1,
-          image_url: r.image_url ?? '',
-        })).filter((r) => r.id && r.name))
-      } catch {
-        if (active) setIngredientsMaster([])
-      }
-    }
-    void loadMaster()
-    return () => {
-      active = false
-    }
-  }, [])
-
-  const options = useMemo(() => ingredientsMaster.map((x) => toTitleCase(x.name)), [ingredientsMaster])
-  const suggestions = useMemo(() => options.filter((x) => x.toLowerCase().includes(query.toLowerCase())), [query, options])
-
-  const getMasterMatch = (name: string) => ingredientsMaster.find((x) => x.name === name.trim().toLowerCase())
-  // Reset all temporary state on mount and unmount to prevent stale data persisting across navigation.
+  // Reset all temporary state on mount and unmount to prevent stale data
+  // persisting across navigation.
   useEffect(() => {
     setPending([])
     setSelectedAuto([])
@@ -87,40 +58,38 @@ export function IngredientInputPage() {
     }
   }, [])
 
+  const suggestions = useMemo(() => options.filter((x) => x.toLowerCase().includes(query.toLowerCase())), [query])
+
   const parsedPreview = useMemo(
     () =>
       parseIngredientLine(line).map((item) => ({
         ...item,
-        name: toTitleCase(item.name),
+        name: toTitleCase(validateIngredientName(item.name).finalName),
         expiryDate: recommendExpiryDate(item.name, item.purchaseDate),
       })),
     [line],
   )
 
   const addPending = (name: string, source: Ingredient['source']) => {
-    const master = getMasterMatch(name)
-    const finalName = master ? master.name : name.trim().toLowerCase()
+    const validated = validateIngredientName(name)
     const today = new Date().toISOString().slice(0, 10)
-    if (!master) {
-      setValidationWarnings((prev) => [...prev, `"${name}" was not found in the latest ingredient catalogue. You can still add it and review details before saving.`])
+    if (validated.flagged) {
+      setValidationWarnings((prev) => [...prev, `"${name}" is not in the ingredient list. Please review before saving.`])
     }
-    const byShelfLife = master
-      ? new Date(new Date(today).getTime() + (master.default_shelf_life_days * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10)
-      : recommendExpiryDate(finalName, today)
+    if (validated.correctedFrom) {
+      setValidationWarnings((prev) => [...prev, `Auto-corrected "${validated.correctedFrom}" to "${toTitleCase(validated.finalName)}".`])
+    }
     setPending((prev) => [
       ...prev,
       {
         id: `${Date.now()}-${name}-${prev.length}`,
-        name: toTitleCase(finalName),
-        icon: master?.image_url ? '' : '🥗',
-        image_url: master?.image_url,
-        default_quantity: master?.default_quantity,
-        default_shelf_life_days: master?.default_shelf_life_days,
-        quantity: master?.default_quantity ?? 1,
-        unit: master?.standard_unit ?? defaultUnitByName(finalName),
-        category: master?.category ?? 'General',
+        name: toTitleCase(validated.finalName),
+        icon: '🥗',
+        quantity: 1,
+        unit: defaultUnitByName(validated.finalName),
+        category: 'General',
         purchaseDate: today,
-        expiryDate: byShelfLife,
+        expiryDate: recommendExpiryDate(validated.finalName, today),
         source,
       },
     ])
@@ -128,25 +97,18 @@ export function IngredientInputPage() {
 
   const applyBatch = () => {
     const parsed = parsedPreview.map((item) => {
-      const master = getMasterMatch(item.name)
-      if (!master) {
+      const validated = validateIngredientName(item.name)
+      if (validated.flagged) {
         setValidationWarnings((prev) => [...prev, `"${item.name}" needs review before adding to fridge.`])
       }
-      const finalName = master ? master.name : item.name
-      const byShelfLife = master
-        ? new Date(new Date(item.purchaseDate).getTime() + (master.default_shelf_life_days * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10)
-        : recommendExpiryDate(finalName, item.purchaseDate)
+      if (validated.correctedFrom) {
+        setValidationWarnings((prev) => [...prev, `Auto-corrected "${validated.correctedFrom}" to "${toTitleCase(validated.finalName)}".`])
+      }
       return {
         ...item,
-        name: toTitleCase(finalName),
-        icon: master?.image_url ? '' : '🥬',
-        image_url: master?.image_url,
-        default_quantity: master?.default_quantity,
-        default_shelf_life_days: master?.default_shelf_life_days,
-        quantity: master?.default_quantity ?? item.quantity,
-        unit: master?.standard_unit ?? item.unit,
-        category: master?.category ?? item.category,
-        expiryDate: byShelfLife,
+        name: toTitleCase(validated.finalName),
+        icon: '🥬',
+        expiryDate: recommendExpiryDate(validated.finalName, item.purchaseDate),
       }
     })
     setPending((prev) => [...prev, ...parsed])
