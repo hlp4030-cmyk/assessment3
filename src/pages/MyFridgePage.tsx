@@ -16,6 +16,14 @@ export function MyFridgePage() {
   const [search, setSearch] = useState('')
   const [categoryTab, setCategoryTab] = useState<'all' | 'veg' | 'meat' | 'dairy' | 'others'>('all')
   const [error, setError] = useState('')
+
+  // Bulk Edit Mode state
+  const [bulkEditMode, setBulkEditMode] = useState(false)
+  const [bulkEdits, setBulkEdits] = useState<Record<string, { quantity: number; expiryDate: string }>>({})
+  const [bulkSnapshot, setBulkSnapshot] = useState<Ingredient[]>([])
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [bulkDeletedIds, setBulkDeletedIds] = useState<Set<string>>(new Set())
+
   const stepByUnit = (unit: string) => {
     const u = unit.toLowerCase()
     if (u === 'ea') return 1
@@ -146,20 +154,188 @@ export function MyFridgePage() {
     }
   }
 
+  // ── Bulk Edit Mode Handlers ──
+
+  const enterBulkEditMode = () => {
+    setBulkSnapshot([...inventory])
+    const edits: Record<string, { quantity: number; expiryDate: string }> = {}
+    for (const item of inventory) {
+      edits[item.id] = { quantity: item.quantity, expiryDate: item.expiryDate }
+    }
+    setBulkEdits(edits)
+    setBulkDeletedIds(new Set())
+    setBulkEditMode(true)
+    setEditingGroup(null) // close any single-edit mode
+  }
+
+  const cancelBulkEdit = () => {
+    setInventory([...bulkSnapshot])
+    setBulkEdits({})
+    setBulkSnapshot([])
+    setBulkDeletedIds(new Set())
+    setBulkEditMode(false)
+    setError('')
+  }
+
+  const saveBulkEdit = async () => {
+    if (!authSession?.accessToken) {
+      setError('Please log in again to sync fridge updates.')
+      return
+    }
+
+    setBulkSaving(true)
+    setError('')
+
+    // Collect zero-quantity items for deletion too
+    const idsToDelete = new Set(bulkDeletedIds)
+    for (const [id, edit] of Object.entries(bulkEdits)) {
+      if (edit.quantity <= 0 && !idsToDelete.has(id)) {
+        idsToDelete.add(id)
+      }
+    }
+
+    // Build list of changed items (exclude deleted ones)
+    const changes: { id: string; quantity: number; expiryDate: string }[] = []
+    for (const item of bulkSnapshot) {
+      if (idsToDelete.has(item.id)) continue
+      const edit = bulkEdits[item.id]
+      if (!edit) continue
+      if (edit.quantity !== item.quantity || edit.expiryDate !== item.expiryDate) {
+        changes.push({ id: item.id, quantity: edit.quantity, expiryDate: edit.expiryDate })
+      }
+    }
+
+    try {
+      const promises: Promise<unknown>[] = []
+
+      // Delete flagged items in parallel
+      for (const id of idsToDelete) {
+        promises.push(deleteMyFridgeItem(authSession.accessToken, id))
+      }
+
+      // Update changed items in parallel
+      const updateResults = changes.length > 0
+        ? await Promise.allSettled([
+            ...promises,
+            ...changes.map((change) =>
+              updateMyFridgeItem(authSession.accessToken, change.id, {
+                quantity: change.quantity,
+                expiry_date: change.expiryDate,
+              }),
+            ),
+          ])
+        : await Promise.allSettled(promises)
+
+      // Process results
+      let hasErrors = false
+      const updatedInventory = inventory
+        .filter((item) => !idsToDelete.has(item.id))
+        .map((item) => {
+          const changeIdx = changes.findIndex((c) => c.id === item.id)
+          if (changeIdx === -1) return item
+          // offset by number of delete promises
+          const result = updateResults[promises.length + changeIdx]
+          if (result && result.status === 'fulfilled') {
+            const updated = result.value as { quantity: number; unit: string; expiry_date: string; ingredient: string; category?: string | null }
+            return {
+              ...item,
+              quantity: updated.quantity,
+              unit: updated.unit,
+              expiryDate: updated.expiry_date,
+              name: updated.ingredient,
+              category: updated.category ?? item.category,
+            }
+          }
+          if (result && result.status === 'rejected') hasErrors = true
+          return item
+        })
+
+      setInventory(updatedInventory)
+      if (hasErrors) {
+        setError('Some items failed to save. Please check and try again.')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save bulk changes.')
+    } finally {
+      setBulkSaving(false)
+      setBulkEditMode(false)
+      setBulkEdits({})
+      setBulkSnapshot([])
+      setBulkDeletedIds(new Set())
+    }
+  }
+
+  const updateBulkEdit = (id: string, field: 'quantity' | 'expiryDate', value: number | string) => {
+    setBulkEdits((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value },
+    }))
+  }
+
   return (
     <section className="space-y-6">
       <div className="glass-card p-8">
         <h1 className="hero-title text-5xl font-semibold">{user.nickname || 'My'}'s Fridge</h1>
         <p className="mt-2 text-slate-600">Track what's fresh and what needs using soon.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-          <input className="rounded-2xl border border-slate-200 bg-white px-4 py-3 transition-colors duration-150" placeholder="Search ingredients..." value={search} onChange={(e) => setSearch(e.target.value)} />
-          <div className="flex flex-wrap gap-2">
+          <input
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 transition-colors duration-150"
+            placeholder="Search ingredients..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            disabled={bulkEditMode}
+          />
+          <div className="flex flex-wrap items-center gap-2">
             {(['all', 'veg', 'meat', 'dairy', 'others'] as const).map((tab) => (
-              <button key={tab} className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-200 ${categoryTab === tab ? 'border-emerald-500 bg-emerald-100 text-emerald-800 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`} onClick={() => setCategoryTab(tab)}>{tab === 'all' ? 'All' : tab === 'veg' ? 'Veg' : tab === 'meat' ? 'Meat' : tab === 'dairy' ? 'Dairy' : 'Others'}</button>
+              <button
+                key={tab}
+                className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all duration-200 ${categoryTab === tab ? 'border-emerald-500 bg-emerald-100 text-emerald-800 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'}`}
+                onClick={() => setCategoryTab(tab)}
+                disabled={bulkEditMode}
+              >
+                {tab === 'all' ? 'All' : tab === 'veg' ? 'Veg' : tab === 'meat' ? 'Meat' : tab === 'dairy' ? 'Dairy' : 'Others'}
+              </button>
             ))}
+            {/* Edit All / Done / Cancel buttons */}
+            {inventory.length > 0 && (
+              <>
+                {!bulkEditMode ? (
+                  <button
+                    onClick={enterBulkEditMode}
+                    className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-1.5 text-sm font-medium text-emerald-700 transition-all hover:bg-emerald-100"
+                  >
+                    ✏️ Edit All
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveBulkEdit}
+                      disabled={bulkSaving}
+                      className="rounded-full bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {bulkSaving ? 'Saving...' : '✓ Done'}
+                    </button>
+                    <button
+                      onClick={cancelBulkEdit}
+                      disabled={bulkSaving}
+                      className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-600 transition-all hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      ✕ Cancel
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
+
+      {bulkEditMode && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <strong>Bulk Edit Mode</strong> — Modify quantities and expiry dates below, then click <strong>Done</strong> to save all changes at once.
+        </div>
+      )}
+
       <div className="grid gap-5 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
         {error && <p className="text-sm text-rose-600 col-span-full">{error}</p>}
         {filteredGroups.map((group) => {
@@ -169,10 +345,17 @@ export function MyFridgePage() {
           const isExpired = dl < 0
           const batchCount = group.rows.length
 
+          // Get bulk edit values for this group's earliest item
+          const bulkEdit = bulkEdits[earliest.id]
+          const displayQty = bulkEditMode && bulkEdit ? bulkEdit.quantity : earliest.quantity
+          const displayExpiry = bulkEditMode && bulkEdit ? bulkEdit.expiryDate : earliest.expiryDate
+
+          const isBulkDeleted = bulkDeletedIds.has(earliest.id)
+
           return (
             <article
               key={group.name}
-              className={`overflow-hidden rounded-3xl border shadow-sm ${isExpired ? 'border-slate-400 bg-slate-300 text-slate-900' : 'glass-card'}`}
+              className={`overflow-hidden rounded-3xl border shadow-sm ${isExpired ? 'border-slate-400 bg-slate-300 text-slate-900' : 'glass-card'} ${bulkEditMode ? 'ring-2 ring-emerald-200' : ''} ${isBulkDeleted ? 'opacity-50 line-through' : ''}`}
             >
               <img src={ingredientImageUrl(group.name)} alt={group.name} className="h-36 w-full object-cover" onError={(e) => { e.currentTarget.src = ingredientImageUrl('fallback') }} />
               <div className={`p-5 ${isExpired ? 'text-slate-900' : ''}`}>
@@ -183,10 +366,61 @@ export function MyFridgePage() {
                   )}
                 </div>
                 <button className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badge}`}>
-                  Earliest Expiry: {formatDateAU(group.earliestExpiryDate)} ({dl < 0 ? `${Math.abs(dl)}d overdue` : `${dl}d left`})
+                  Earliest Expiry: {formatDateAU(displayExpiry)} ({dl < 0 ? `${Math.abs(dl)}d overdue` : `${dl}d left`})
                 </button>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
-                  {editingGroup === group.name ? (
+                  {/* ── BULK EDIT MODE ── */}
+                  {bulkEditMode ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm text-slate-600 hover:bg-slate-100"
+                          onClick={() => updateBulkEdit(earliest.id, 'quantity', Math.max(0, (bulkEdit?.quantity ?? earliest.quantity) - stepByUnit(group.unit)))}
+                          disabled={isBulkDeleted}
+                        >−</button>
+                        <input
+                          type="number"
+                          min={0}
+                          step={stepByUnit(group.unit)}
+                          value={displayQty}
+                          onChange={(e) => updateBulkEdit(earliest.id, 'quantity', Math.max(0, Number(e.target.value) || 0))}
+                          disabled={isBulkDeleted}
+                          className="w-20 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-center text-sm transition-colors duration-150 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+                        />
+                        <button
+                          className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm text-slate-600 hover:bg-slate-100"
+                          onClick={() => updateBulkEdit(earliest.id, 'quantity', (bulkEdit?.quantity ?? earliest.quantity) + stepByUnit(group.unit))}
+                          disabled={isBulkDeleted}
+                        >+</button>
+                      </div>
+                      <span className="text-sm text-slate-500">{group.unit}</span>
+                      <input
+                        type="date"
+                        value={displayExpiry}
+                        onChange={(e) => updateBulkEdit(earliest.id, 'expiryDate', e.target.value)}
+                        disabled={isBulkDeleted}
+                        className="rounded-lg border border-emerald-300 bg-white px-2 py-1 text-sm transition-colors duration-150 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+                      />
+                      {/* Trash Delete button */}
+                      <button
+                        className={`rounded-full border px-3 py-1 text-sm font-medium transition-colors ${isBulkDeleted ? 'border-slate-300 bg-slate-100 text-slate-400' : 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+                        onClick={() => {
+                          setBulkDeletedIds((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(earliest.id)) {
+                              next.delete(earliest.id) // toggle off
+                            } else {
+                              next.add(earliest.id)
+                            }
+                            return next
+                          })
+                        }}
+                      >
+                        {isBulkDeleted ? '↩ Undo' : '🗑️ Delete'}
+                      </button>
+                    </>
+                  ) : editingGroup === group.name ? (
+                    /* ── SINGLE EDIT MODE (existing) ── */
                     <>
                       <input type="number" step={stepByUnit(group.unit)} value={earliest.quantity} onChange={(e) => {
                         const nextQty = Math.max(0, Number(e.target.value) || 0)
@@ -243,6 +477,7 @@ export function MyFridgePage() {
                       </button>
                     </>
                   ) : (
+                    /* ── VIEW MODE (existing) ── */
                     <>
                       <button
                         className={`rounded-full border border-emerald-200 bg-white px-3 py-1 ${loadingId === group.name ? 'opacity-50 cursor-not-allowed' : ''}`}

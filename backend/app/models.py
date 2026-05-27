@@ -105,3 +105,27 @@ class WasteResponse(BaseModel):
     profile: ProfileResponse
     savings_penalty: float
     co2e_penalty: float
+
+
+class QuickAddSettingResponse(BaseModel):
+    """A user's custom quick-add ingredient default."""
+
+    id: str
+    user_id: str
+    ingredient_name: str
+    default_quantity: float
+    unit: str
+
+
+class QuickAddSettingUpsertRequest(BaseModel):
+    """Payload to upsert a quick-add setting."""
+
+    ingredient_name: str
+    default_quantity: float = Field(gt=0)
+    unit: str
+
+
+class QuickAddSettingDeleteRequest(BaseModel):
+    """Payload to delete a quick-add setting."""
+
+    ingredient_name: str

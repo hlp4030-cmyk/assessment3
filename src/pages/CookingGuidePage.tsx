@@ -30,7 +30,7 @@ export function CookingGuidePage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Required ingredients</p>
         <ul className="mt-2 space-y-1 text-slate-700">
           {selectedRecipe.required.map((req) => (
-            <li key={req.name}>{req.quantity} {req.unit} {req.name}</li>
+            <li key={req.name}>{req.quantity || 0} {req.unit || 'ea'} {req.name || 'Unknown ingredient'}</li>
           ))}
         </ul>
       </div>

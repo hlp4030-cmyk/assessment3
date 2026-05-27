@@ -262,6 +262,68 @@ export async function cookRecipe(accessToken: string, payload: CookPayload): Pro
   return data as CookResponse
 }
 
+// ── Quick Add Settings API ──
+
+export type QuickAddSettingResponse = {
+  id: string
+  user_id: string
+  ingredient_name: string
+  default_quantity: number
+  unit: string
+}
+
+export type QuickAddSettingUpsertPayload = {
+  ingredient_name: string
+  default_quantity: number
+  unit: string
+}
+
+export async function getQuickAddSettings(accessToken: string): Promise<QuickAddSettingResponse[]> {
+  const response = await fetch(`${BACKEND_BASE_URL}/api/quick-add/settings`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+
+  const data = (await response.json()) as QuickAddSettingResponse[] | { detail?: unknown }
+  if (!response.ok) {
+    throw new Error(extractErrorMessage((data as { detail?: unknown }).detail, 'Failed to fetch quick add settings'))
+  }
+  return data as QuickAddSettingResponse[]
+}
+
+export async function upsertQuickAddSetting(accessToken: string, payload: QuickAddSettingUpsertPayload): Promise<QuickAddSettingResponse> {
+  const response = await fetch(`${BACKEND_BASE_URL}/api/quick-add/settings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  const data = (await response.json()) as QuickAddSettingResponse | { detail?: unknown }
+  if (!response.ok) {
+    throw new Error(extractErrorMessage((data as { detail?: unknown }).detail, 'Failed to save quick add setting'))
+  }
+  return data as QuickAddSettingResponse
+}
+
+export async function deleteQuickAddSettingAPI(accessToken: string, ingredientName: string): Promise<void> {
+  const response = await fetch(`${BACKEND_BASE_URL}/api/quick-add/settings`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ ingredient_name: ingredientName }),
+  })
+
+  const data = (await response.json()) as { status?: string; detail?: unknown }
+  if (!response.ok) {
+    throw new Error(extractErrorMessage(data.detail, 'Failed to delete quick add setting'))
+  }
+}
+
 export async function markItemWasted(accessToken: string, itemId: string): Promise<WasteResponse> {
   const response = await fetch(`${BACKEND_BASE_URL}/fridge/me/${itemId}/waste`, {
     method: 'PATCH',

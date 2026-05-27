@@ -58,7 +58,7 @@ export function AppProviders({ children }: PropsWithChildren) {
   const [goals, setGoals] = useState<GoalState>(() => JSON.parse(localStorage.getItem('eatup-goals') ?? 'null') ?? defaultGoals)
   const [rewards, setRewards] = useState<RewardState>(() => JSON.parse(localStorage.getItem('eatup-rewards') ?? 'null') ?? defaultRewards)
   const [inventory, setInventory] = useState<Ingredient[]>(() => JSON.parse(localStorage.getItem('eatup-inventory') ?? '[]'))
-  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null)
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(() => JSON.parse(sessionStorage.getItem('eatup-selected-recipe') ?? 'null'))
 
   const value = useMemo(
     () => ({
@@ -79,6 +79,14 @@ export function AppProviders({ children }: PropsWithChildren) {
     }),
     [isAuthenticated, authSession, user, goals, rewards, inventory, selectedRecipe],
   )
+
+  useEffect(() => {
+    if (selectedRecipe) {
+      sessionStorage.setItem('eatup-selected-recipe', JSON.stringify(selectedRecipe))
+    } else {
+      sessionStorage.removeItem('eatup-selected-recipe')
+    }
+  }, [selectedRecipe])
 
   useEffect(() => {
     if (!isAuthenticated) {

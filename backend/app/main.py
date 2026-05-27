@@ -15,20 +15,26 @@ from .models import (
     LoginRequest,
     ProfilePayload,
     ProfileResponse,
+    QuickAddSettingDeleteRequest,
+    QuickAddSettingResponse,
+    QuickAddSettingUpsertRequest,
     SignupRequest,
     WasteResponse,
 )
 from .supabase_auth import (
     create_fridge_item,
     delete_fridge_item,
+    delete_quick_add_setting,
     get_auth_user,
     get_fridge_item_by_id,
     get_user_profile,
     list_fridge_items,
+    list_quick_add_settings,
     login_with_supabase,
     signup_with_supabase,
     update_fridge_item,
     update_profile_goal_fields,
+    upsert_quick_add_setting,
     upsert_user_profile,
 )
 
@@ -254,3 +260,35 @@ async def waste_item(item_id: str, authorization: str | None = Header(default=No
         savings_penalty=_SAVINGS_PENALTY,
         co2e_penalty=_CO2E_PENALTY,
     )
+
+
+# ---------------------------------------------------------------------------
+# Quick-Add Settings — persistent per-user ingredient defaults
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/quick-add/settings", response_model=list[QuickAddSettingResponse])
+async def get_quick_add_settings(authorization: str | None = Header(default=None)) -> list[QuickAddSettingResponse]:
+    """Retrieve all custom quick-add settings for the authenticated user."""
+
+    access_token, user_id = await _resolve_user_id_from_auth_header(authorization)
+    rows = await list_quick_add_settings(access_token, user_id)
+    return [QuickAddSettingResponse(**row) for row in rows]
+
+
+@app.post("/api/quick-add/settings", response_model=QuickAddSettingResponse)
+async def post_quick_add_setting(payload: QuickAddSettingUpsertRequest, authorization: str | None = Header(default=None)) -> QuickAddSettingResponse:
+    """Upsert a custom quick-add setting for the authenticated user."""
+
+    access_token, user_id = await _resolve_user_id_from_auth_header(authorization)
+    row = await upsert_quick_add_setting(access_token, user_id, payload.model_dump())
+    return QuickAddSettingResponse(**row)
+
+
+@app.delete("/api/quick-add/settings")
+async def remove_quick_add_setting(payload: QuickAddSettingDeleteRequest, authorization: str | None = Header(default=None)) -> dict[str, str]:
+    """Delete a custom quick-add setting for the authenticated user."""
+
+    access_token, user_id = await _resolve_user_id_from_auth_header(authorization)
+    await delete_quick_add_setting(access_token, user_id, payload.ingredient_name)
+    return {"status": "deleted"}

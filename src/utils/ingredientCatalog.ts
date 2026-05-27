@@ -39,6 +39,69 @@ export const MASTER_INGREDIENTS = [
   'banana',
 ] as const
 
+export type IngredientCategory = 'vegetables' | 'fruits' | 'meat' | 'seafood' | 'dairy' | 'grains'
+
+export const CATEGORIES: { key: IngredientCategory; label: string; icon: string }[] = [
+  { key: 'vegetables', label: 'Vegetables', icon: '🥦' },
+  { key: 'fruits', label: 'Fruits', icon: '🍎' },
+  { key: 'meat', label: 'Meat', icon: '🥩' },
+  { key: 'seafood', label: 'Seafood', icon: '🐟' },
+  { key: 'dairy', label: 'Dairy', icon: '🥛' },
+  { key: 'grains', label: 'Grains', icon: '🌾' },
+]
+
+export const INGREDIENT_CATEGORIES: Record<string, IngredientCategory> = {
+  // Vegetables
+  tomatoes: 'vegetables',
+  spinach: 'vegetables',
+  onion: 'vegetables',
+  garlic: 'vegetables',
+  carrot: 'vegetables',
+  capsicum: 'vegetables',
+  mushroom: 'vegetables',
+  broccoli: 'vegetables',
+  cauliflower: 'vegetables',
+  zucchini: 'vegetables',
+  eggplant: 'vegetables',
+  potato: 'vegetables',
+  'sweet potato': 'vegetables',
+  lettuce: 'vegetables',
+  cucumber: 'vegetables',
+  corn: 'vegetables',
+  peas: 'vegetables',
+  beans: 'vegetables',
+  chickpeas: 'vegetables',
+  // Meat
+  chicken: 'meat',
+  beef: 'meat',
+  pork: 'meat',
+  tofu: 'meat',
+  // Dairy
+  milk: 'dairy',
+  eggs: 'dairy',
+  yogurt: 'dairy',
+  cheese: 'dairy',
+  butter: 'dairy',
+  // Fruits
+  lemon: 'fruits',
+  banana: 'fruits',
+  basil: 'fruits',
+  parsley: 'fruits',
+  // Seafood
+  fish: 'seafood',
+  shrimp: 'seafood',
+  // Grains
+  rice: 'grains',
+  pasta: 'grains',
+  oats: 'grains',
+  bread: 'grains',
+}
+
+export const getCategoryForIngredient = (name: string): IngredientCategory => {
+  const normalised = name.trim().toLowerCase()
+  return INGREDIENT_CATEGORIES[normalised] ?? 'vegetables'
+}
+
 const levenshtein = (a: string, b: string) => {
   const dp = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0))
   for (let i = 0; i <= a.length; i++) dp[i][0] = i

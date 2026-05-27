@@ -264,6 +264,81 @@ async def get_fridge_item_by_id(access_token: str, user_id: str, item_id: str) -
     raise HTTPException(status_code=404, detail="Fridge item not found")
 
 
+async def list_quick_add_settings(access_token: str, user_id: str) -> list[dict[str, Any]]:
+    """List all quick-add settings for current user."""
+
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/user_quick_add_settings?user_id=eq.{user_id}&select=*"
+    headers = {
+        "apikey": settings.SUPABASE_ANON_KEY,
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(url, headers=headers)
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except Exception:
+            detail = {"message": response.text}
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    rows = response.json()
+    return rows if isinstance(rows, list) else []
+
+
+async def upsert_quick_add_setting(access_token: str, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Upsert a quick-add setting for current user (on conflict user_id + ingredient_name)."""
+
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/user_quick_add_settings?on_conflict=user_id,ingredient_name"
+    headers = {
+        "apikey": settings.SUPABASE_ANON_KEY,
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=representation",
+    }
+
+    body = {"user_id": user_id, **payload}
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post(url, headers=headers, json=body)
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except Exception:
+            detail = {"message": response.text}
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    rows = response.json()
+    if isinstance(rows, list) and rows:
+        return rows[0]
+    return body
+
+
+async def delete_quick_add_setting(access_token: str, user_id: str, ingredient_name: str) -> None:
+    """Delete a quick-add setting for current user by ingredient name."""
+
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/user_quick_add_settings?user_id=eq.{user_id}&ingredient_name=eq.{ingredient_name}"
+    headers = {
+        "apikey": settings.SUPABASE_ANON_KEY,
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.delete(url, headers=headers)
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except Exception:
+            detail = {"message": response.text}
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+
 async def update_profile_goal_fields(
     access_token: str,
     user_id: str,

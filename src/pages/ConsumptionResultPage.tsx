@@ -31,20 +31,46 @@ export function ConsumptionResultPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [usedItems, setUsedItems] = useState(() =>
     (selectedRecipe?.required ?? []).map((req) => ({
-      ...req,
+      name: req.name || 'Unknown',
+      quantity: req.quantity || 0,
+      unit: req.unit || 'ea',
       purchaseDate: today,
-      expiryDate: recommendExpiryDate(req.name, today),
+      expiryDate: recommendExpiryDate(req.name || '', today),
     })),
   )
 
-  if (!selectedRecipe) {
-    return <section className="rounded-3xl bg-white p-8 shadow-sm">No completed dish found.</section>
-  }
-
+  // All hooks MUST be called before any early returns (React rules of hooks)
   const requiredWithAdjustments = useMemo(
     () => usedItems.map(({ name, quantity, unit }) => ({ name, quantity: Math.max(0, quantity), unit })),
     [usedItems],
   )
+
+  // Current goal state (before cook confirmation)
+  const currentMeals = goals.mealsCookedThisWeek ?? 0
+  const currentSavings = goals.savingsThisMonthAud ?? 0
+  const currentCo2e = goals.wasteReductionAchievedPercent ?? 0
+  // Projected deltas from this recipe
+  const deltaSavings = Math.max(6, requiredWithAdjustments.length * 2)
+  const deltaCo2e = Math.max(0.12, Number((requiredWithAdjustments.length * 0.08).toFixed(2)))
+  // Progress bar uses projected values
+  const cookingProgress = Math.min(100, Math.round(((currentMeals + 1) / Math.max(1, goals.weeklyMealsTarget)) * 100))
+  const savingsProgress = Math.min(100, Math.round(((currentSavings + deltaSavings) / Math.max(1, goals.monthlySavingsTargetAud)) * 100))
+  const environmentProgress = Math.min(100, Math.round(((currentCo2e + deltaCo2e) / 25) * 100))
+
+  // Early return AFTER all hooks
+  if (!selectedRecipe) {
+    return (
+      <SectionContainer>
+        <Card>
+          <h1 className="text-4xl font-semibold">Consumption Result</h1>
+          <p className="mt-3 text-slate-600">No completed dish found. Please select a recipe and complete cooking first.</p>
+          <div className="mt-4">
+            <Button onClick={() => navigate('/meal-suggestions')}>Browse Recipes</Button>
+          </div>
+        </Card>
+      </SectionContainer>
+    )
+  }
 
   const applyResult = async () => {
     if (isSubmitting) return
@@ -106,18 +132,6 @@ export function ConsumptionResultPage() {
       setIsSubmitting(false)
     }
   }
-
-  // Current goal state (before cook confirmation)
-  const currentMeals = goals.mealsCookedThisWeek ?? 0
-  const currentSavings = goals.savingsThisMonthAud ?? 0
-  const currentCo2e = goals.wasteReductionAchievedPercent ?? 0
-  // Projected deltas from this recipe
-  const deltaSavings = Math.max(6, requiredWithAdjustments.length * 2)
-  const deltaCo2e = Math.max(0.12, Number((requiredWithAdjustments.length * 0.08).toFixed(2)))
-  // Progress bar uses projected values
-  const cookingProgress = Math.min(100, Math.round(((currentMeals + 1) / Math.max(1, goals.weeklyMealsTarget)) * 100))
-  const savingsProgress = Math.min(100, Math.round(((currentSavings + deltaSavings) / Math.max(1, goals.monthlySavingsTargetAud)) * 100))
-  const environmentProgress = Math.min(100, Math.round(((currentCo2e + deltaCo2e) / 25) * 100))
 
   return (
     <SectionContainer><Card>
