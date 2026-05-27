@@ -56,3 +56,9 @@ textarea:focus {
 ::selection {
   background: rgba(16, 185, 129, 0.2);
 }
+
+/* ── Hide browser-native password reveal icons (Chrome/Edge) ── */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-webkit-credentials-auto-fill-button {
+  display: none !important;
+}
