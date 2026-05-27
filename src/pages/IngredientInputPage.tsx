@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppState } from '../context/useAppState.ts'
 import { createMyFridgeItem, getQuickAddSettings, upsertQuickAddSetting, deleteQuickAddSettingAPI } from '../lib/backendApi.ts'
-import type { QuickAddSettingResponse } from '../lib/backendApi.ts'
 import { recommendExpiryDate } from '../domain/expiry/recommendExpiryDate.ts'
 import { mergeIngredients } from '../domain/rewards/rewardEngine.ts'
 import type { Ingredient } from '../types/models.ts'
@@ -44,11 +43,11 @@ interface EditRow {
 }
 
 export function IngredientInputPage() {
-  const { inventory, setInventory, user, authSession } = useAppState()
+  const { inventory, setInventory, authSession } = useAppState()
   const [query, setQuery] = useState('')
   const [pending, setPending] = useState<Ingredient[]>([])
   const [selectedAuto, setSelectedAuto] = useState<string[]>([])
-  const [validationWarnings, setValidationWarnings] = useState<string[]>([])
+  const [, setValidationWarnings] = useState<string[]>([])
   const [applySuccess, setApplySuccess] = useState(false)
   const [isApplying, setIsApplying] = useState(false)
   const navigate = useNavigate()
