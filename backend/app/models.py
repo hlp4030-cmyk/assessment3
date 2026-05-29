@@ -129,3 +129,42 @@ class QuickAddSettingDeleteRequest(BaseModel):
     """Payload to delete a quick-add setting."""
 
     ingredient_name: str
+
+
+# ---------------------------------------------------------------------------
+# Master Data — Ingredients & Recipes (fetched from Supabase tables)
+# ---------------------------------------------------------------------------
+
+
+class IngredientResponse(BaseModel):
+    """A row from the public `ingredients` master table."""
+
+    id: str
+    name: str
+    category: str
+    standard_unit: str
+    default_shelf_life_days: int
+    default_quantity: int
+    image_url: str | None = None
+
+
+class RecipeIngredientResolved(BaseModel):
+    """A single required ingredient inside a recipe, resolved with the ingredient name."""
+
+    id: str
+    name: str
+    quantity: float
+    unit: str
+
+
+class RecipeResponse(BaseModel):
+    """A row from the public `recipes` master table, with resolved ingredients and parsed steps."""
+
+    recipe_id: str
+    title: str
+    description: str | None = None
+    cooking_time_mins: int
+    image_url: str | None = None
+    required_ingredients: list[RecipeIngredientResolved]
+    steps: list[str]
+    meal_type: str

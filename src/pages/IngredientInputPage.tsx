@@ -1,19 +1,32 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppState } from '../context/useAppState.ts'
-import { createMyFridgeItem, getQuickAddSettings, upsertQuickAddSetting, deleteQuickAddSettingAPI } from '../lib/backendApi.ts'
-import { recommendExpiryDate } from '../domain/expiry/recommendExpiryDate.ts'
+import { createMyFridgeItem, fetchIngredients, getQuickAddSettings, upsertQuickAddSetting, deleteQuickAddSettingAPI } from '../lib/backendApi.ts'
 import { mergeIngredients } from '../domain/rewards/rewardEngine.ts'
-import type { Ingredient } from '../types/models.ts'
-import { MASTER_INGREDIENTS, toTitleCase, validateIngredientName, CATEGORIES, getCategoryForIngredient } from '../utils/ingredientCatalog.ts'
-import type { IngredientCategory } from '../utils/ingredientCatalog.ts'
-import { VALID_UNITS, getUnitForIngredient } from '../utils/unitRules.ts'
+import type { DbIngredient, Ingredient } from '../types/models.ts'
+import { toTitleCase } from '../utils/ingredientCatalog.ts'
+import { getIngredientImageUrl, getIngredientEmoji } from '../utils/ingredientImages.ts'
 import { Button } from '../components/ui/Button.tsx'
 import { Card } from '../components/ui/Card.tsx'
 import { SectionContainer } from '../components/ui/SectionContainer.tsx'
 
-const options = MASTER_INGREDIENTS.map(toTitleCase)
-const UNIT_OPTIONS = VALID_UNITS
+const CATEGORY_EMOJI: Record<string, string> = {
+  vegetables: '🥦',
+  fruits: '🍎',
+  meat: '🥩',
+  seafood: '🐟',
+  dairy: '🥛',
+  grains: '🌾',
+}
+
+const CATEGORIES: { key: string; label: string; icon: string }[] = [
+  { key: 'vegetables', label: 'Vegetables', icon: '🥦' },
+  { key: 'fruits', label: 'Fruits', icon: '🍎' },
+  { key: 'meat', label: 'Meat', icon: '🥩' },
+  { key: 'seafood', label: 'Seafood', icon: '🐟' },
+  { key: 'dairy', label: 'Dairy', icon: '🥛' },
+  { key: 'grains', label: 'Grains', icon: '🌾' },
+]
 
 const stepByUnit = (unit: string) => {
   const u = unit.toLowerCase()
@@ -23,17 +36,12 @@ const stepByUnit = (unit: string) => {
   return 1
 }
 
-const defaultUnitByName = (name: string) => getUnitForIngredient(name)
-
-// Default quick add items (used as fallback when DB is empty)
-const DEFAULT_QUICK_ADD: { ingredient_name: string; default_quantity: number; unit: string }[] = [
-  'Eggs', 'Milk', 'Chicken', 'Rice', 'Tomatoes', 'Spinach',
-  'Pasta', 'Onion', 'Garlic', 'Bread', 'Cheese', 'Butter',
-].map((name) => ({
-  ingredient_name: name,
-  default_quantity: 1,
-  unit: defaultUnitByName(name),
-}))
+/** Calculate expiry date: today + default_shelf_life_days */
+const calcExpiryDate = (shelfLifeDays: number): string => {
+  const d = new Date()
+  d.setDate(d.getDate() + shelfLifeDays)
+  return d.toISOString().slice(0, 10)
+}
 
 interface EditRow {
   name: string
@@ -52,8 +60,13 @@ export function IngredientInputPage() {
   const [isApplying, setIsApplying] = useState(false)
   const navigate = useNavigate()
 
+  // DB-driven ingredient catalog
+  const [dbIngredients, setDbIngredients] = useState<DbIngredient[]>([])
+  const [ingredientsLoaded, setIngredientsLoaded] = useState(false)
+  const [ingredientsError, setIngredientsError] = useState('')
+
   // Category filter
-  const [activeCategory, setActiveCategory] = useState<IngredientCategory | null>(null)
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
   // Dynamic edit row
   const [editRow, setEditRow] = useState<EditRow | null>(null)
 
@@ -61,7 +74,18 @@ export function IngredientInputPage() {
   const [quickAddSettings, setQuickAddSettings] = useState<Record<string, { quantity: number; unit: string }>>({})
   const [quickAddLoaded, setQuickAddLoaded] = useState(false)
   const [editQuickAddMode, setEditQuickAddMode] = useState(false)
-  const [addNewQuickAdd, setAddNewQuickAdd] = useState('') // ingredient name picker
+  const [addNewQuickAdd, setAddNewQuickAdd] = useState('')
+
+  // Build lookup maps from DB ingredients
+  const ingredientByName = useMemo(() => {
+    const map: Record<string, DbIngredient> = {}
+    for (const ing of dbIngredients) {
+      map[ing.name.toLowerCase()] = ing
+    }
+    return map
+  }, [dbIngredients])
+
+  const ingredientNames = useMemo(() => dbIngredients.map((i) => toTitleCase(i.name)), [dbIngredients])
 
   // Reset temp state on mount/unmount
   useEffect(() => {
@@ -83,106 +107,123 @@ export function IngredientInputPage() {
     }
   }, [])
 
-  // Fetch Quick Add settings from DB on mount — MERGE with defaults
+  // Fetch ingredients from DB on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const rows = await fetchIngredients()
+        setDbIngredients(rows)
+        setIngredientsError('')
+      } catch {
+        setIngredientsError('Failed to load ingredient catalog. Please refresh.')
+      }
+      setIngredientsLoaded(true)
+    }
+    void load()
+  }, [])
+
+  // Fetch Quick Add settings from DB on mount
   useEffect(() => {
     const load = async () => {
       if (!authSession?.accessToken) { setQuickAddLoaded(true); return }
       try {
         const rows = await getQuickAddSettings(authSession.accessToken)
 
-        // Always start with the default 12 items as the base
+        // Build default quick add from DB ingredients (first 12 alphabetically as defaults)
+        const defaultQuickAdd = dbIngredients.slice(0, 12).map((ing) => ({
+          ingredient_name: ing.name,
+          default_quantity: ing.default_quantity,
+          unit: ing.standard_unit,
+        }))
+
         const merged: Record<string, { quantity: number; unit: string }> = {}
-        for (const item of DEFAULT_QUICK_ADD) {
+        for (const item of defaultQuickAdd) {
           const key = toTitleCase(item.ingredient_name)
           merged[key] = { quantity: item.default_quantity, unit: item.unit }
         }
 
-        // Overlay DB settings on top (user customizations override defaults)
+        // Overlay DB settings on top
         for (const row of rows) {
           const key = toTitleCase(row.ingredient_name)
-          if (merged[key]) {
-            // Override default quantity/unit with user's DB preference
-            merged[key] = { quantity: row.default_quantity, unit: row.unit }
-          } else {
-            // User-added custom ingredient (not in defaults) — resolve correct unit
-            merged[key] = { quantity: row.default_quantity, unit: row.unit || defaultUnitByName(key) }
-          }
+          merged[key] = { quantity: row.default_quantity, unit: row.unit }
         }
 
         setQuickAddSettings(merged)
       } catch {
-        // Fallback to defaults only
+        // Fallback: build defaults from DB ingredients
         const map: Record<string, { quantity: number; unit: string }> = {}
-        for (const item of DEFAULT_QUICK_ADD) {
-          map[toTitleCase(item.ingredient_name)] = { quantity: item.default_quantity, unit: item.unit }
+        for (const ing of dbIngredients.slice(0, 12)) {
+          map[toTitleCase(ing.name)] = { quantity: ing.default_quantity, unit: ing.standard_unit }
         }
         setQuickAddSettings(map)
       }
       setQuickAddLoaded(true)
     }
-    void load()
-  }, [authSession?.accessToken])
+    if (ingredientsLoaded) void load()
+  }, [authSession?.accessToken, ingredientsLoaded, dbIngredients])
 
   // Quick add names derived from settings
   const quickAddNames = useMemo(() => Object.keys(quickAddSettings), [quickAddSettings])
 
+  // Track which ingredients are already in the pending tray
+  const pendingNames = useMemo(() => new Set(pending.map((p) => p.name.toLowerCase())), [pending])
+
   // Compute displayed items: search text filter + category filter
   const displayedItems = useMemo(() => {
-    let items = options
+    let items = ingredientNames
     if (activeCategory) {
-      items = items.filter((item) => getCategoryForIngredient(item) === activeCategory)
+      items = items.filter((item) => {
+        const db = ingredientByName[item.toLowerCase()]
+        return db?.category === activeCategory
+      })
     }
     if (query.length > 0) {
       items = items.filter((x) => x.toLowerCase().includes(query.toLowerCase()))
     }
     if (query.length === 0 && !activeCategory) return []
     return items
-  }, [query, activeCategory])
+  }, [query, activeCategory, ingredientNames, ingredientByName])
 
-  const addPending = (name: string, source: Ingredient['source'], override?: { quantity?: number; unit?: string }) => {
-    const validated = validateIngredientName(name)
+  const addPending = (name: string, source: Ingredient['source'], override?: { quantity?: number; unit?: string; expiryDate?: string }) => {
+    const db = ingredientByName[name.toLowerCase()]
     const today = new Date().toISOString().slice(0, 10)
-    if (validated.flagged) {
-      setValidationWarnings((prev) => [...prev, `"${name}" is not in the ingredient list. Please review before saving.`])
-    }
-    if (validated.correctedFrom) {
-      setValidationWarnings((prev) => [...prev, `Auto-corrected "${validated.correctedFrom}" to "${toTitleCase(validated.finalName)}".`])
-    }
+    const defaultQty = override?.quantity ?? db?.default_quantity ?? 1
+    const defaultUnit = override?.unit ?? db?.standard_unit ?? 'ea'
+    const defaultExpiry = override?.expiryDate ?? (db ? calcExpiryDate(db.default_shelf_life_days) : today)
+    const category = db?.category ?? 'vegetables'
+    const icon = CATEGORY_EMOJI[category] ?? '🥗'
+
     setPending((prev) => [
       ...prev,
       {
         id: `${Date.now()}-${name}-${prev.length}`,
-        name: toTitleCase(validated.finalName),
-        icon: '🥗',
-        quantity: override?.quantity ?? 1,
-        unit: override?.unit ?? defaultUnitByName(validated.finalName),
-        category: 'General',
+        name: toTitleCase(name),
+        icon,
+        quantity: defaultQty,
+        unit: defaultUnit,
+        category,
         purchaseDate: today,
-        expiryDate: recommendExpiryDate(validated.finalName, today),
+        expiryDate: defaultExpiry,
         source,
       },
     ])
   }
 
-  // Open edit row for search/category item
+  // Open edit row for search/category item — uses DB defaults
   const openEditRow = (name: string) => {
+    const db = ingredientByName[name.toLowerCase()]
     const today = new Date().toISOString().slice(0, 10)
     setEditRow({
       name: toTitleCase(name),
-      quantity: 1,
-      unit: defaultUnitByName(name),
-      expiryDate: recommendExpiryDate(name, today),
+      quantity: db?.default_quantity ?? 1,
+      unit: db?.standard_unit ?? 'ea',
+      expiryDate: db ? calcExpiryDate(db.default_shelf_life_days) : today,
     })
   }
 
   const confirmEditRow = () => {
     if (!editRow) return
-    addPending(editRow.name, 'autocomplete', { quantity: editRow.quantity, unit: editRow.unit })
-    setPending((prev) => {
-      const last = prev[prev.length - 1]
-      if (!last) return prev
-      return prev.map((item) => item.id === last.id ? { ...item, expiryDate: editRow.expiryDate } : item)
-    })
+    addPending(editRow.name, 'autocomplete', { quantity: editRow.quantity, unit: editRow.unit, expiryDate: editRow.expiryDate })
     setSelectedAuto((prev) => (prev.includes(editRow.name) ? prev : [...prev, editRow.name]))
     setEditRow(null)
     setQuery('')
@@ -197,7 +238,7 @@ export function IngredientInputPage() {
     }
   }
 
-  const toggleCategory = (key: IngredientCategory) => {
+  const toggleCategory = (key: string) => {
     setActiveCategory((prev) => (prev === key ? null : key))
     setEditRow(null)
   }
@@ -212,7 +253,7 @@ export function IngredientInputPage() {
         unit,
       })
     } catch {
-      // Silent fail — local state still updated
+      // Silent fail
     }
   }
 
@@ -226,24 +267,26 @@ export function IngredientInputPage() {
     }
   }
 
-  // Available ingredients not yet in Quick Add (for dropdown picker)
+  // Available ingredients not yet in Quick Add
   const availableNewQuickAdd = useMemo(
-    () => options.filter((name) => !quickAddSettings[name]),
-    [quickAddSettings],
+    () => ingredientNames.filter((name) => !quickAddSettings[name]),
+    [ingredientNames, quickAddSettings],
   )
 
-  // Add new ingredient to quick add (from dropdown — always valid)
+  // Add new ingredient to quick add
   const addNewQuickAddItem = async () => {
     const name = toTitleCase(addNewQuickAdd.trim())
     if (!name || quickAddSettings[name]) return
-    const unit = getUnitForIngredient(name) // always resolve from catalog
-    const settings = { quantity: 1, unit }
+    const db = ingredientByName[name.toLowerCase()]
+    const unit = db?.standard_unit ?? 'ea'
+    const qty = db?.default_quantity ?? 1
+    const settings = { quantity: qty, unit }
     setQuickAddSettings((prev) => ({ ...prev, [name]: settings }))
     setAddNewQuickAdd('')
-    await saveQuickAddSetting(name, 1, unit)
+    await saveQuickAddSetting(name, qty, unit)
   }
 
-  // Quick Add card click (default mode): add to pending using DB defaults
+  // Quick Add card click
   const quickAddClick = (name: string) => {
     const settings = quickAddSettings[name]
     if (!settings) return
@@ -291,14 +334,37 @@ export function IngredientInputPage() {
 
   const updatePending = (id: string, patch: Partial<Ingredient>) => {
     setPending((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item
-        const next = { ...item, ...patch }
-        if (patch.name || patch.purchaseDate) {
-          next.expiryDate = recommendExpiryDate(next.name, next.purchaseDate)
-        }
-        return next
-      }),
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    )
+  }
+
+  // Loading state
+  if (!ingredientsLoaded) {
+    return (
+      <SectionContainer>
+        <Card>
+          <h2 className="text-2xl font-semibold">Search Ingredients</h2>
+          <div className="mt-6 space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-10 w-full animate-pulse rounded-xl bg-slate-200" />
+            ))}
+          </div>
+          <p className="mt-4 text-sm text-slate-400">Loading ingredient catalog...</p>
+        </Card>
+      </SectionContainer>
+    )
+  }
+
+  // Error state
+  if (ingredientsError) {
+    return (
+      <SectionContainer>
+        <Card>
+          <h2 className="text-2xl font-semibold">Search Ingredients</h2>
+          <p className="mt-4 text-sm text-rose-600">{ingredientsError}</p>
+          <Button className="mt-3" onClick={() => window.location.reload()}>Retry</Button>
+        </Card>
+      </SectionContainer>
     )
   }
 
@@ -364,7 +430,7 @@ export function IngredientInputPage() {
             <p className="mt-2 text-xs text-slate-400">Press <kbd className="rounded border border-slate-300 px-1">Enter</kbd> to select <strong>{displayedItems[0]}</strong></p>
           )}
 
-          {/* Dynamic Temporary Edit Row */}
+          {/* Dynamic Temporary Edit Row — uses DB defaults */}
           {editRow && (
             <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50/40 p-4">
               <p className="mb-2 text-sm font-medium text-emerald-800">Configure & add:</p>
@@ -375,9 +441,8 @@ export function IngredientInputPage() {
                   <input type="number" min={0} step={stepByUnit(editRow.unit)} value={editRow.quantity} onChange={(e) => setEditRow((prev) => prev ? { ...prev, quantity: Number(e.target.value) || 0 } : prev)} className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-center text-sm text-slate-800" />
                   <button className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm text-slate-600 hover:bg-slate-100" onClick={() => setEditRow((prev) => prev ? { ...prev, quantity: prev.quantity + stepByUnit(prev.unit) } : prev)}>+</button>
                 </div>
-                <select value={editRow.unit} onChange={(e) => setEditRow((prev) => prev ? { ...prev, unit: e.target.value } : prev)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-800">
-                  {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-                </select>
+                {/* Unit is locked to DB standard_unit */}
+                <span className="rounded-lg border border-slate-300 bg-slate-100 px-2 py-1 text-sm text-slate-600">{editRow.unit}</span>
                 <input type="date" value={editRow.expiryDate} onChange={(e) => setEditRow((prev) => prev ? { ...prev, expiryDate: e.target.value } : prev)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-800" />
                 <button onClick={confirmEditRow} className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700" aria-label="Confirm add">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
@@ -402,15 +467,29 @@ export function IngredientInputPage() {
           </div>
 
           {!quickAddLoaded ? (
-            <p className="mt-4 text-sm text-slate-400">Loading preferences...</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-20 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />
+              ))}
+            </div>
           ) : (
             <div className="mt-4 grid grid-cols-2 gap-3">
               {quickAddNames.map((name) => {
                 const settings = quickAddSettings[name]
                 if (!settings) return null
+                const db = ingredientByName[name.toLowerCase()]
                 return (
                   <div key={name} className={`rounded-2xl border p-4 text-left transition-colors ${editQuickAddMode ? 'border-emerald-300 bg-emerald-50/30' : 'border-emerald-200'}`}>
-                    <p className="font-medium">{name}</p>
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={getIngredientImageUrl(name, db?.image_url)}
+                        alt={name}
+                        className="w-12 h-12 object-contain shrink-0 rounded-lg bg-slate-50"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden') }}
+                      />
+                      <span className="text-2xl hidden">{getIngredientEmoji(db?.category)}</span>
+                      <span className="font-medium text-sm leading-tight">{name}</span>
+                    </div>
                     {editQuickAddMode ? (
                       <>
                         <div className="mt-2 flex items-center gap-1.5">
@@ -438,13 +517,24 @@ export function IngredientInputPage() {
                     ) : (
                       <>
                         <p className="text-sm text-slate-500">{settings.quantity} {settings.unit}</p>
-                        <button className="mt-2 text-xs font-medium text-emerald-600 hover:text-emerald-800" onClick={() => quickAddClick(name)}>+ Add to tray</button>
+                        {pendingNames.has(name.toLowerCase()) ? (
+                          <button className="mt-2 w-full rounded-lg border border-emerald-300 bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 cursor-default" disabled>
+                            ✓ In Tray
+                          </button>
+                        ) : (
+                          <button
+                            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95"
+                            onClick={() => quickAddClick(name)}
+                          >
+                            + Add to tray
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
                 )
               })}
-              {/* Add New card in edit mode — dropdown picker */}
+              {/* Add New card in edit mode */}
               {editQuickAddMode && (
                 <div className="rounded-2xl border-2 border-dashed border-slate-300 p-4">
                   <p className="text-sm font-medium text-slate-600">+ Add New</p>
@@ -482,9 +572,7 @@ export function IngredientInputPage() {
             <div key={item.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-5 md:items-center">
               <p className="font-medium">{item.name}</p>
               <input type="number" min={0} step={stepByUnit(item.unit)} value={item.quantity} onChange={(e) => updatePending(item.id, { quantity: Number(e.target.value) || 0 })} className="rounded-2xl border border-slate-200 p-3 transition-colors duration-150" />
-              <select value={item.unit} onChange={(e) => updatePending(item.id, { unit: e.target.value })} className="rounded-2xl border border-slate-200 p-3 transition-colors duration-150">
-                {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <span className="rounded-2xl border border-slate-300 bg-slate-100 p-3 text-sm text-slate-600">{item.unit}</span>
               <input type="date" value={item.expiryDate} onChange={(e) => updatePending(item.id, { expiryDate: e.target.value })} className="rounded-2xl border border-slate-200 p-3 transition-colors duration-150" />
               <Button variant="ghost" onClick={() => setPending((prev) => prev.filter((x) => x.id !== item.id))}>Delete</Button>
             </div>

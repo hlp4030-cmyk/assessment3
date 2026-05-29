@@ -12,12 +12,15 @@ from .models import (
     FridgeItemResponse,
     FridgeItemUpdateRequest,
     HealthResponse,
+    IngredientResponse,
     LoginRequest,
     ProfilePayload,
     ProfileResponse,
     QuickAddSettingDeleteRequest,
     QuickAddSettingResponse,
     QuickAddSettingUpsertRequest,
+    RecipeIngredientResolved,
+    RecipeResponse,
     SignupRequest,
     WasteResponse,
 )
@@ -28,6 +31,8 @@ from .supabase_auth import (
     get_auth_user,
     get_fridge_item_by_id,
     get_user_profile,
+    list_all_ingredients,
+    list_all_recipes,
     list_fridge_items,
     list_quick_add_settings,
     login_with_supabase,
@@ -292,3 +297,72 @@ async def remove_quick_add_setting(payload: QuickAddSettingDeleteRequest, author
     access_token, user_id = await _resolve_user_id_from_auth_header(authorization)
     await delete_quick_add_setting(access_token, user_id, payload.ingredient_name)
     return {"status": "deleted"}
+
+
+# ---------------------------------------------------------------------------
+# Master Data — Ingredients & Recipes (public, no auth required)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/ingredients", response_model=list[IngredientResponse])
+async def get_ingredients() -> list[IngredientResponse]:
+    """Fetch all ingredients from the public master table."""
+
+    rows = await list_all_ingredients()
+    return [IngredientResponse(**row) for row in rows]
+
+
+@app.get("/api/recipes", response_model=list[RecipeResponse])
+async def get_recipes() -> list[RecipeResponse]:
+    """Fetch all recipes from the public master table.
+
+    Resolves ingredient IDs in ``required_ingredients`` JSONB to their names
+    by cross-referencing the ingredients table, and parses the pipe-delimited
+    ``instructions`` TEXT into a list of steps.
+    """
+
+    import json
+
+    recipe_rows = await list_all_recipes()
+    ingredient_rows = await list_all_ingredients()
+
+    # Build id → name lookup map
+    id_to_name: dict[str, str] = {row["id"]: row["name"] for row in ingredient_rows}
+
+    results: list[RecipeResponse] = []
+    for r in recipe_rows:
+        # Parse required_ingredients JSONB
+        raw_ingredients = r.get("required_ingredients") or []
+        if isinstance(raw_ingredients, str):
+            raw_ingredients = json.loads(raw_ingredients)
+
+        resolved: list[RecipeIngredientResolved] = []
+        for item in raw_ingredients:
+            ing_id = item.get("id", "")
+            resolved.append(
+                RecipeIngredientResolved(
+                    id=ing_id,
+                    name=id_to_name.get(ing_id, ing_id),
+                    quantity=float(item.get("qty", 0)),
+                    unit=item.get("unit", "ea"),
+                )
+            )
+
+        # Parse instructions TEXT by pipe delimiter
+        instructions_text = r.get("instructions") or ""
+        steps = [s.strip() for s in instructions_text.split("|") if s.strip()]
+
+        results.append(
+            RecipeResponse(
+                recipe_id=r.get("recipe_id", ""),
+                title=r.get("title", ""),
+                description=r.get("description"),
+                cooking_time_mins=int(r.get("cooking_time_mins", 0)),
+                image_url=r.get("image_url"),
+                required_ingredients=resolved,
+                steps=steps,
+                meal_type=r.get("meal_type", "all"),
+            )
+        )
+
+    return results

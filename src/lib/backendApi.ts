@@ -1,3 +1,5 @@
+import type { DbIngredient, DbRecipe } from '../types/models'
+
 const BACKEND_BASE_URL = 'http://localhost:8000'
 
 export type SignupPayload = {
@@ -337,4 +339,32 @@ export async function markItemWasted(accessToken: string, itemId: string): Promi
     throw new Error(extractErrorMessage((data as { detail?: unknown }).detail, 'Failed to mark item as wasted'))
   }
   return data as WasteResponse
+}
+
+// ── Master Data API (public, no auth required) ──
+
+export async function fetchIngredients(): Promise<DbIngredient[]> {
+  const response = await fetch(`${BACKEND_BASE_URL}/api/ingredients`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  })
+
+  const data = (await response.json()) as DbIngredient[] | { detail?: unknown }
+  if (!response.ok) {
+    throw new Error(extractErrorMessage((data as { detail?: unknown }).detail, 'Failed to fetch ingredients'))
+  }
+  return data as DbIngredient[]
+}
+
+export async function fetchRecipes(): Promise<DbRecipe[]> {
+  const response = await fetch(`${BACKEND_BASE_URL}/api/recipes`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  })
+
+  const data = (await response.json()) as DbRecipe[] | { detail?: unknown }
+  if (!response.ok) {
+    throw new Error(extractErrorMessage((data as { detail?: unknown }).detail, 'Failed to fetch recipes'))
+  }
+  return data as DbRecipe[]
 }

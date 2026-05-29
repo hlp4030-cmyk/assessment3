@@ -60,3 +60,36 @@ export interface Recipe {
   required: Array<{ name: string; quantity: number; unit: string }>
   steps: string[]
 }
+
+
+// ---------------------------------------------------------------------------
+// DB-aligned master-data types (fetched from Supabase via backend)
+// ---------------------------------------------------------------------------
+
+export interface DbIngredient {
+  id: string
+  name: string
+  category: string // 'vegetables' | 'fruits' | 'meat' | 'seafood' | 'dairy' | 'grains'
+  standard_unit: string
+  default_shelf_life_days: number
+  default_quantity: number
+  image_url?: string | null
+}
+
+export interface RecipeIngredientItem {
+  id: string // ingredient ID (e.g. "i002")
+  name: string // resolved ingredient name
+  quantity: number // from JSONB "qty"
+  unit: string
+}
+
+export interface DbRecipe {
+  recipe_id: string
+  title: string
+  description?: string | null
+  cooking_time_mins: number
+  image_url?: string | null
+  required_ingredients: RecipeIngredientItem[]
+  steps: string[] // pre-parsed by backend from "|"-delimited instructions
+  meal_type: string
+}

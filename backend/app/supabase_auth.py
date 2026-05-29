@@ -339,6 +339,58 @@ async def delete_quick_add_setting(access_token: str, user_id: str, ingredient_n
         raise HTTPException(status_code=response.status_code, detail=detail)
 
 
+async def list_all_ingredients() -> list[dict[str, Any]]:
+    """Fetch all rows from the public `ingredients` master table.
+
+    This is public reference data — no user access token required.
+    """
+
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/ingredients?select=*&order=name"
+    headers = {
+        "apikey": settings.SUPABASE_ANON_KEY,
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(url, headers=headers)
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except Exception:
+            detail = {"message": response.text}
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    rows = response.json()
+    return rows if isinstance(rows, list) else []
+
+
+async def list_all_recipes() -> list[dict[str, Any]]:
+    """Fetch all rows from the public `recipes` master table.
+
+    This is public reference data — no user access token required.
+    """
+
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/recipes?select=*"
+    headers = {
+        "apikey": settings.SUPABASE_ANON_KEY,
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(url, headers=headers)
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except Exception:
+            detail = {"message": response.text}
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    rows = response.json()
+    return rows if isinstance(rows, list) else []
+
+
 async def update_profile_goal_fields(
     access_token: str,
     user_id: str,

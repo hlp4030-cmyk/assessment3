@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '../context/useAppState.ts'
-import { deleteMyFridgeItem, getMyFridgeItems, markItemWasted, updateMyFridgeItem } from '../lib/backendApi.ts'
+import { deleteMyFridgeItem, fetchIngredients, getMyFridgeItems, markItemWasted, updateMyFridgeItem } from '../lib/backendApi.ts'
 import { formatDateAU } from '../utils/formatters.ts'
-import { ingredientImageUrl } from '../utils/ingredientAssets.ts'
+import { getIngredientImageUrl } from '../utils/ingredientImages.ts'
 import { groupByName } from '../utils/fridgeGrouping.ts'
 import type { FridgeGroup } from '../utils/fridgeGrouping.ts'
 import type { Ingredient } from '../types/models.ts'
@@ -16,6 +16,7 @@ export function MyFridgePage() {
   const [search, setSearch] = useState('')
   const [categoryTab, setCategoryTab] = useState<'all' | 'veg' | 'meat' | 'dairy' | 'others'>('all')
   const [error, setError] = useState('')
+  const [dbIngredients, setDbIngredients] = useState<Array<{ name: string; image_url?: string | null }>>([])
 
   // Bulk Edit Mode state
   const [bulkEditMode, setBulkEditMode] = useState(false)
@@ -56,6 +57,28 @@ export function MyFridgePage() {
   const filteredGroups: FridgeGroup[] = groupByName(inventory)
     .filter((group) => group.name.toLowerCase().includes(search.toLowerCase()))
     .filter((group) => tabMatch(group.name))
+
+  // Fetch ingredient master data (for image_url) on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const rows = await fetchIngredients()
+        setDbIngredients(rows)
+      } catch {
+        // Non-blocking: keep existing fallback if load fails.
+      }
+    }
+    void load()
+  }, [])
+
+  // Build image URL lookup from DB ingredients
+  const imageUrlMap = useMemo(() => {
+    const map: Record<string, string | null> = {}
+    for (const ing of dbIngredients) {
+      map[ing.name.toLowerCase()] = ing.image_url ?? null
+    }
+    return map
+  }, [dbIngredients])
 
   useEffect(() => {
     const run = async () => {
@@ -357,7 +380,7 @@ export function MyFridgePage() {
               key={group.name}
               className={`overflow-hidden rounded-3xl border shadow-sm ${isExpired ? 'border-slate-400 bg-slate-300 text-slate-900' : 'glass-card'} ${bulkEditMode ? 'ring-2 ring-emerald-200' : ''} ${isBulkDeleted ? 'opacity-50 line-through' : ''}`}
             >
-              <img src={ingredientImageUrl(group.name)} alt={group.name} className="h-36 w-full object-cover" onError={(e) => { e.currentTarget.src = ingredientImageUrl('fallback') }} />
+              <img src={getIngredientImageUrl(group.name, imageUrlMap[group.name.toLowerCase()])} alt={group.name} className="h-36 w-full object-cover" onError={(e) => { e.currentTarget.src = getIngredientImageUrl('fallback') }} />
               <div className={`p-5 ${isExpired ? 'text-slate-900' : ''}`}>
                 <div className="flex items-center justify-between">
                   <h2 className="mt-2 text-xl font-semibold">{group.name}</h2>
