@@ -146,6 +146,8 @@ class IngredientResponse(BaseModel):
     default_shelf_life_days: int
     default_quantity: int
     image_url: str | None = None
+    approx_price: float | None = None
+    co2_index: float | None = None
 
 
 class RecipeIngredientResolved(BaseModel):

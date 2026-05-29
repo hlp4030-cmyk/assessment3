@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAppState } from '../context/useAppState.ts'
-import { cookRecipe } from '../lib/backendApi.ts'
+import { cookRecipe, fetchIngredients, getMyProfile } from '../lib/backendApi.ts'
 import type { CookItemPayload } from '../lib/backendApi.ts'
+import type { DbIngredient } from '../types/models.ts'
 import { recommendExpiryDate } from '../domain/expiry/recommendExpiryDate.ts'
 import { formatCurrencyAU } from '../utils/formatters.ts'
 import { Button } from '../components/ui/Button.tsx'
@@ -39,19 +40,92 @@ export function ConsumptionResultPage() {
     })),
   )
 
+  // DB ingredient data for dynamic pricing/CO2
+  const [dbIngredients, setDbIngredients] = useState<DbIngredient[]>([])
+  const [ingredientsLoaded, setIngredientsLoaded] = useState(false)
+
+  // Real baseline from DB (fetched on mount) — initialized to 0 so first-meal displays start from zero
+  const [realBaseline, setRealBaseline] = useState<{ cooking: number; savings: number; co2e: number }>({ cooking: 0, savings: 0, co2e: 0 })
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const rows = await fetchIngredients()
+        setDbIngredients(rows)
+      } catch {
+        // Non-blocking
+      }
+      setIngredientsLoaded(true)
+    }
+    void load()
+  }, [])
+
+  // Fetch real profile goal values as the true "before" baseline
+  useEffect(() => {
+    const load = async () => {
+      if (!authSession?.accessToken) return
+      try {
+        const profile = await getMyProfile(authSession.accessToken)
+        setRealBaseline({
+          cooking: profile.goal_cooking ?? 0,
+          savings: profile.goal_savings ?? 0,
+          co2e: profile.goal_co2e ?? 0,
+        })
+      } catch {
+        // Non-blocking: fall back to local state if fetch fails
+      }
+    }
+    void load()
+  }, [authSession?.accessToken])
+
+  // Build ingredient lookup map (name -> DB data)
+  const ingredientLookup = useMemo(() => {
+    const map: Record<string, DbIngredient> = {}
+    for (const ing of dbIngredients) {
+      map[ing.name.toLowerCase()] = ing
+    }
+    return map
+  }, [dbIngredients])
+
   // All hooks MUST be called before any early returns (React rules of hooks)
   const requiredWithAdjustments = useMemo(
     () => usedItems.map(({ name, quantity, unit }) => ({ name, quantity: Math.max(0, quantity), unit })),
     [usedItems],
   )
 
-  // Current goal state (before cook confirmation)
-  const currentMeals = goals.mealsCookedThisWeek ?? 0
-  const currentSavings = goals.savingsThisMonthAud ?? 0
-  const currentCo2e = goals.wasteReductionAchievedPercent ?? 0
-  // Projected deltas from this recipe
-  const deltaSavings = Math.max(6, requiredWithAdjustments.length * 2)
-  const deltaCo2e = Math.max(0.12, Number((requiredWithAdjustments.length * 0.08).toFixed(2)))
+  // Always use real DB baseline — no fallback to potentially stale local state
+  const currentMeals = realBaseline.cooking
+  const currentSavings = realBaseline.savings
+  const currentCo2e = realBaseline.co2e
+
+  // Dynamic delta calculation using DB approx_price and co2_index
+  const { deltaSavings, deltaCo2e } = useMemo(() => {
+    let totalSavings = 0
+    let totalCo2 = 0
+    let hasAnyPrice = false
+    let hasAnyCo2 = false
+
+    for (const item of requiredWithAdjustments) {
+      const db = ingredientLookup[item.name.toLowerCase()]
+      if (db) {
+        if (db.approx_price != null) {
+          totalSavings += item.quantity * db.approx_price
+          hasAnyPrice = true
+        }
+        if (db.co2_index != null) {
+          totalCo2 += item.quantity * db.co2_index
+          hasAnyCo2 = true
+        }
+      }
+    }
+
+    return {
+      // Fallback to placeholder if no DB price data available
+      deltaSavings: hasAnyPrice ? totalSavings : Math.max(6, requiredWithAdjustments.length * 2),
+      deltaCo2e: hasAnyCo2 ? Number(totalCo2.toFixed(2)) : Math.max(0.12, Number((requiredWithAdjustments.length * 0.08).toFixed(2))),
+    }
+  }, [requiredWithAdjustments, ingredientLookup])
+
   // Progress bar uses projected values
   const cookingProgress = Math.min(100, Math.round(((currentMeals + 1) / Math.max(1, goals.weeklyMealsTarget)) * 100))
   const savingsProgress = Math.min(100, Math.round(((currentSavings + deltaSavings) / Math.max(1, goals.monthlySavingsTargetAud)) * 100))

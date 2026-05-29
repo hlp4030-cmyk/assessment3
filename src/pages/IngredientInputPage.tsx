@@ -10,6 +10,11 @@ import { Button } from '../components/ui/Button.tsx'
 import { Card } from '../components/ui/Card.tsx'
 import { SectionContainer } from '../components/ui/SectionContainer.tsx'
 
+const DEFAULT_QUICK_ADD_NAMES = [
+  'Oats', 'Rice', 'Pasta', 'Loaf Bread', 'Milk', 'Cheese', 'Yogurt', 'Eggs',
+  'Beef Steak', 'Chicken Breast', 'Tomato', 'Avocado', 'Carrot', 'Banana', 'Strawberries',
+]
+
 const CATEGORY_EMOJI: Record<string, string> = {
   vegetables: '🥦',
   fruits: '🍎',
@@ -67,14 +72,17 @@ export function IngredientInputPage() {
 
   // Category filter
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  // Dynamic edit row
-  const [editRow, setEditRow] = useState<EditRow | null>(null)
+  // Multiple dynamic edit rows (supports stacking selections)
+  const [editRows, setEditRows] = useState<EditRow[]>([])
 
   // DB-driven Quick Add
   const [quickAddSettings, setQuickAddSettings] = useState<Record<string, { quantity: number; unit: string }>>({})
   const [quickAddLoaded, setQuickAddLoaded] = useState(false)
   const [editQuickAddMode, setEditQuickAddMode] = useState(false)
   const [addNewQuickAdd, setAddNewQuickAdd] = useState('')
+
+  // Bulk save progress
+  const [saveProgress, setSaveProgress] = useState<{ current: number; total: number } | null>(null)
 
   // Build lookup maps from DB ingredients
   const ingredientByName = useMemo(() => {
@@ -94,16 +102,17 @@ export function IngredientInputPage() {
     setValidationWarnings([])
     setApplySuccess(false)
     setIsApplying(false)
-    setEditRow(null)
+    setEditRows([])
     setEditQuickAddMode(false)
     setAddNewQuickAdd('')
+    setSaveProgress(null)
     return () => {
       setPending([])
       setSelectedAuto([])
       setValidationWarnings([])
       setApplySuccess(false)
       setIsApplying(false)
-      setEditRow(null)
+      setEditRows([])
     }
   }, [])
 
@@ -129,12 +138,18 @@ export function IngredientInputPage() {
       try {
         const rows = await getQuickAddSettings(authSession.accessToken)
 
-        // Build default quick add from DB ingredients (first 12 alphabetically as defaults)
-        const defaultQuickAdd = dbIngredients.slice(0, 12).map((ing) => ({
-          ingredient_name: ing.name,
-          default_quantity: ing.default_quantity,
-          unit: ing.standard_unit,
-        }))
+        // Build default quick add from DB ingredients
+        const defaultQuickAdd = DEFAULT_QUICK_ADD_NAMES
+          .map((name) => {
+            const db = dbIngredients.find((ing) => ing.name.toLowerCase() === name.toLowerCase())
+            if (!db) return null
+            return {
+              ingredient_name: db.name,
+              default_quantity: db.default_quantity,
+              unit: db.standard_unit,
+            }
+          })
+          .filter((item): item is { ingredient_name: string; default_quantity: number; unit: string } => item !== null)
 
         const merged: Record<string, { quantity: number; unit: string }> = {}
         for (const item of defaultQuickAdd) {
@@ -152,8 +167,11 @@ export function IngredientInputPage() {
       } catch {
         // Fallback: build defaults from DB ingredients
         const map: Record<string, { quantity: number; unit: string }> = {}
-        for (const ing of dbIngredients.slice(0, 12)) {
-          map[toTitleCase(ing.name)] = { quantity: ing.default_quantity, unit: ing.standard_unit }
+        for (const name of DEFAULT_QUICK_ADD_NAMES) {
+          const db = dbIngredients.find((ing) => ing.name.toLowerCase() === name.toLowerCase())
+          if (db) {
+            map[toTitleCase(db.name)] = { quantity: db.default_quantity, unit: db.standard_unit }
+          }
         }
         setQuickAddSettings(map)
       }
@@ -167,6 +185,9 @@ export function IngredientInputPage() {
 
   // Track which ingredients are already in the pending tray
   const pendingNames = useMemo(() => new Set(pending.map((p) => p.name.toLowerCase())), [pending])
+
+  // Track which ingredients are already in edit rows
+  const editRowNames = useMemo(() => new Set(editRows.map((r) => r.name.toLowerCase())), [editRows])
 
   // Compute displayed items: search text filter + category filter
   const displayedItems = useMemo(() => {
@@ -209,24 +230,48 @@ export function IngredientInputPage() {
     ])
   }
 
-  // Open edit row for search/category item — uses DB defaults
+  // Open edit row for search/category item — stacks onto editRows array
   const openEditRow = (name: string) => {
+    // Don't add duplicate if already in edit rows
+    if (editRowNames.has(name.toLowerCase())) return
+
     const db = ingredientByName[name.toLowerCase()]
     const today = new Date().toISOString().slice(0, 10)
-    setEditRow({
+    const newRow: EditRow = {
       name: toTitleCase(name),
       quantity: db?.default_quantity ?? 1,
       unit: db?.standard_unit ?? 'ea',
       expiryDate: db ? calcExpiryDate(db.default_shelf_life_days) : today,
-    })
+    }
+    setEditRows((prev) => [...prev, newRow])
   }
 
-  const confirmEditRow = () => {
-    if (!editRow) return
-    addPending(editRow.name, 'autocomplete', { quantity: editRow.quantity, unit: editRow.unit, expiryDate: editRow.expiryDate })
-    setSelectedAuto((prev) => (prev.includes(editRow.name) ? prev : [...prev, editRow.name]))
-    setEditRow(null)
-    setQuery('')
+  // Confirm a single edit row into pending tray
+  const confirmSingleEditRow = (index: number) => {
+    const row = editRows[index]
+    if (!row) return
+    addPending(row.name, 'autocomplete', { quantity: row.quantity, unit: row.unit, expiryDate: row.expiryDate })
+    setSelectedAuto((prev) => (prev.includes(row.name) ? prev : [...prev, row.name]))
+    setEditRows((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // Confirm all edit rows into pending tray at once
+  const confirmAllEditRows = () => {
+    for (const row of editRows) {
+      addPending(row.name, 'autocomplete', { quantity: row.quantity, unit: row.unit, expiryDate: row.expiryDate })
+      setSelectedAuto((prev) => (prev.includes(row.name) ? prev : [...prev, row.name]))
+    }
+    setEditRows([])
+  }
+
+  // Remove a single edit row without confirming
+  const removeEditRow = (index: number) => {
+    setEditRows((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // Update a field on a specific edit row
+  const updateEditRow = (index: number, field: keyof EditRow, value: string | number) => {
+    setEditRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
   }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -240,7 +285,7 @@ export function IngredientInputPage() {
 
   const toggleCategory = (key: string) => {
     setActiveCategory((prev) => (prev === key ? null : key))
-    setEditRow(null)
+    setEditRows([])
   }
 
   // Save a quick add setting to DB
@@ -293,35 +338,47 @@ export function IngredientInputPage() {
     addPending(name, 'quick-add', { quantity: settings.quantity, unit: settings.unit })
   }
 
-  // Batch save
+  // Batch save with progress indicator (batches of 5 for balance of speed + feedback)
   const applyToFridge = async () => {
     if (!authSession?.accessToken || isApplying) return
     setIsApplying(true)
+    setSaveProgress({ current: 0, total: pending.length })
+
+    const BATCH_SIZE = 5
+    const persistedItems: Ingredient[] = []
+
     try {
-      const results = await Promise.allSettled(
-        pending.map((item) =>
-          createMyFridgeItem(authSession.accessToken, {
-            ingredient: item.name,
-            quantity: item.quantity,
-            unit: item.unit,
-            expiry_date: item.expiryDate,
-            status: 'in_fridge',
-            category: item.category,
-          }).then((created) => ({
-            ...item,
-            id: created.id,
-            name: created.ingredient,
-            quantity: created.quantity,
-            unit: created.unit,
-            expiryDate: created.expiry_date,
-            category: created.category ?? item.category,
-          })),
-        ),
-      )
-      const persistedItems: Ingredient[] = []
-      for (const result of results) {
-        if (result.status === 'fulfilled') persistedItems.push(result.value)
+      for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+        const batch = pending.slice(i, i + BATCH_SIZE)
+        const results = await Promise.allSettled(
+          batch.map((item) =>
+            createMyFridgeItem(authSession.accessToken, {
+              ingredient: item.name,
+              quantity: item.quantity,
+              unit: item.unit,
+              expiry_date: item.expiryDate,
+              status: 'in_fridge',
+              category: item.category,
+            }).then((created) => ({
+              ...item,
+              id: created.id,
+              name: created.ingredient,
+              quantity: created.quantity,
+              unit: created.unit,
+              expiryDate: created.expiry_date,
+              category: created.category ?? item.category,
+            })),
+          ),
+        )
+
+        for (const result of results) {
+          if (result.status === 'fulfilled') persistedItems.push(result.value)
+        }
+
+        const completed = Math.min(i + BATCH_SIZE, pending.length)
+        setSaveProgress({ current: completed, total: pending.length })
       }
+
       setInventory((prev) => mergeIngredients(prev, persistedItems))
       setPending([])
       setSelectedAuto([])
@@ -329,6 +386,7 @@ export function IngredientInputPage() {
       window.setTimeout(() => setApplySuccess(false), 1800)
     } finally {
       setIsApplying(false)
+      setSaveProgress(null)
     }
   }
 
@@ -378,10 +436,10 @@ export function IngredientInputPage() {
               className="w-full bg-transparent p-1 outline-none"
               placeholder="Type ingredient..."
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setEditRow(null) }}
+              onChange={(e) => { setQuery(e.target.value) }}
               onKeyDown={handleSearchKeyDown}
             />
-            {query && <button className="rounded-full px-2 text-slate-500 hover:bg-slate-100" onClick={() => { setQuery(''); setEditRow(null) }}>✕</button>}
+            {query && <button className="rounded-full px-2 text-slate-500 hover:bg-slate-100" onClick={() => { setQuery('') }}>✕</button>}
           </div>
 
           {/* Category Icon Filter Bar */}
@@ -416,7 +474,7 @@ export function IngredientInputPage() {
               <button
                 key={item}
                 className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                  selectedAuto.includes(item) || editRow?.name === item
+                  selectedAuto.includes(item) || editRowNames.has(item.toLowerCase())
                     ? 'bg-slate-900 text-white'
                     : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                 }`}
@@ -426,31 +484,42 @@ export function IngredientInputPage() {
               </button>
             ))}
           </div>
-          {displayedItems.length === 1 && !editRow && (
+          {displayedItems.length === 1 && !editRowNames.has(displayedItems[0].toLowerCase()) && (
             <p className="mt-2 text-xs text-slate-400">Press <kbd className="rounded border border-slate-300 px-1">Enter</kbd> to select <strong>{displayedItems[0]}</strong></p>
           )}
 
-          {/* Dynamic Temporary Edit Row — uses DB defaults */}
-          {editRow && (
-            <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50/40 p-4">
-              <p className="mb-2 text-sm font-medium text-emerald-800">Configure & add:</p>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="rounded-full bg-emerald-600 px-3 py-1 text-sm font-semibold text-white">{editRow.name}</span>
-                <div className="flex items-center gap-1">
-                  <button className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm text-slate-600 hover:bg-slate-100" onClick={() => setEditRow((prev) => prev ? { ...prev, quantity: Math.max(0, prev.quantity - stepByUnit(prev.unit)) } : prev)}>−</button>
-                  <input type="number" min={0} step={stepByUnit(editRow.unit)} value={editRow.quantity} onChange={(e) => setEditRow((prev) => prev ? { ...prev, quantity: Number(e.target.value) || 0 } : prev)} className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-center text-sm text-slate-800" />
-                  <button className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm text-slate-600 hover:bg-slate-100" onClick={() => setEditRow((prev) => prev ? { ...prev, quantity: prev.quantity + stepByUnit(prev.unit) } : prev)}>+</button>
-                </div>
-                {/* Unit is locked to DB standard_unit */}
-                <span className="rounded-lg border border-slate-300 bg-slate-100 px-2 py-1 text-sm text-slate-600">{editRow.unit}</span>
-                <input type="date" value={editRow.expiryDate} onChange={(e) => setEditRow((prev) => prev ? { ...prev, expiryDate: e.target.value } : prev)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-800" />
-                <button onClick={confirmEditRow} className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700" aria-label="Confirm add">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                </button>
-                <button onClick={() => setEditRow(null)} className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50" aria-label="Cancel">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          {/* Dynamic Temporary Edit Rows — stacked for multi-selection */}
+          {editRows.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-emerald-800">Staged selections ({editRows.length}):</p>
+                <button
+                  onClick={confirmAllEditRows}
+                  className="rounded-full bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700"
+                >
+                  ✓ Confirm All
                 </button>
               </div>
+              {editRows.map((row, index) => (
+                <div key={`${row.name}-${index}`} className="rounded-2xl border border-emerald-300 bg-emerald-50/40 p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="rounded-full bg-emerald-600 px-3 py-1 text-sm font-semibold text-white">{row.name}</span>
+                    <div className="flex items-center gap-1">
+                      <button className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm text-slate-600 hover:bg-slate-100" onClick={() => updateEditRow(index, 'quantity', Math.max(0, row.quantity - stepByUnit(row.unit)))}>−</button>
+                      <input type="number" min={0} step={stepByUnit(row.unit)} value={row.quantity} onChange={(e) => updateEditRow(index, 'quantity', Number(e.target.value) || 0)} className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-center text-sm text-slate-800" />
+                      <button className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 text-sm text-slate-600 hover:bg-slate-100" onClick={() => updateEditRow(index, 'quantity', row.quantity + stepByUnit(row.unit))}>+</button>
+                    </div>
+                    <span className="rounded-lg border border-slate-300 bg-slate-100 px-2 py-1 text-sm text-slate-600">{row.unit}</span>
+                    <input type="date" value={row.expiryDate} onChange={(e) => updateEditRow(index, 'expiryDate', e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-800" />
+                    <button onClick={() => confirmSingleEditRow(index)} className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700" aria-label="Confirm add">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    </button>
+                    <button onClick={() => removeEditRow(index)} className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50" aria-label="Remove">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </Card>
@@ -580,7 +649,19 @@ export function IngredientInputPage() {
           {pending.length === 0 && <p className="text-slate-500">No pending items yet.</p>}
         </div>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Button onClick={applyToFridge} disabled={pending.length === 0} loading={isApplying} loadingText="Saving...">Save to My Fridge</Button>
+          {isApplying && saveProgress ? (
+            <div className="flex items-center gap-3">
+              <div className="h-2 w-48 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-emerald-600 transition-all duration-300"
+                  style={{ width: `${(saveProgress.current / saveProgress.total) * 100}%` }}
+                />
+              </div>
+              <span className="text-sm font-medium text-emerald-700">Saving {saveProgress.current}/{saveProgress.total} items...</span>
+            </div>
+          ) : (
+            <Button onClick={applyToFridge} disabled={pending.length === 0} loading={isApplying} loadingText="Saving...">Save to My Fridge</Button>
+          )}
           <Button variant="secondary" onClick={() => navigate('/my-fridge')}>Go to My Fridge</Button>
         </div>
         {applySuccess && <p className="mt-3 text-sm font-semibold text-emerald-700">Successfully updated!</p>}

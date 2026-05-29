@@ -74,6 +74,8 @@ export interface DbIngredient {
   default_shelf_life_days: number
   default_quantity: number
   image_url?: string | null
+  approx_price?: number | null
+  co2_index?: number | null
 }
 
 export interface RecipeIngredientItem {

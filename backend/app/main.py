@@ -185,11 +185,16 @@ async def cook_recipe(payload: CookRequest, authorization: str | None = Header(d
 
     updated_items: list[FridgeItemResponse] = []
     used_item_ids: list[str] = []
+    # Track ingredient names and quantities for dynamic pricing
+    consumed_items: list[tuple[str, float]] = []  # (ingredient_name, quantity_used)
 
     for cook_item in payload.items:
         row = await get_fridge_item_by_id(access_token, user_id, cook_item.item_id)
         current_qty = float(row.get("quantity", 0))
         new_qty = max(0.0, current_qty - cook_item.quantity_used)
+
+        # Record for dynamic pricing calculation
+        consumed_items.append((row.get("ingredient", ""), cook_item.quantity_used))
 
         if new_qty <= 0:
             # Fully consumed → mark as 'used'
@@ -205,10 +210,35 @@ async def cook_recipe(payload: CookRequest, authorization: str | None = Header(d
             })
             updated_items.append(FridgeItemResponse(**patched))
 
-    # Calculate reward values
-    ingredient_count = len(payload.items)
-    savings_delta = max(_SAVINGS_MIN, ingredient_count * _SAVINGS_PER_INGREDIENT)
-    co2e_delta = max(_CO2E_MIN, round(ingredient_count * _CO2E_PER_INGREDIENT, 2))
+    # Calculate reward values dynamically using DB ingredient pricing/CO2 data
+    ingredient_rows = await list_all_ingredients()
+    ingredient_map: dict[str, dict] = {}
+    for ing in ingredient_rows:
+        ingredient_map[ing["name"].lower()] = ing
+
+    savings_delta = 0.0
+    co2e_delta = 0.0
+    has_any_price = False
+    has_any_co2 = False
+
+    for ingredient_name, qty_used in consumed_items:
+        db_ing = ingredient_map.get(ingredient_name.lower())
+        if db_ing:
+            if db_ing.get("approx_price") is not None:
+                savings_delta += qty_used * float(db_ing["approx_price"])
+                has_any_price = True
+            if db_ing.get("co2_index") is not None:
+                co2e_delta += qty_used * float(db_ing["co2_index"])
+                has_any_co2 = True
+
+    # Fallback to placeholder if no DB pricing data available
+    if not has_any_price:
+        savings_delta = max(_SAVINGS_MIN, len(payload.items) * _SAVINGS_PER_INGREDIENT)
+    if not has_any_co2:
+        co2e_delta = max(_CO2E_MIN, round(len(payload.items) * _CO2E_PER_INGREDIENT, 2))
+
+    savings_delta = round(savings_delta, 2)
+    co2e_delta = round(co2e_delta, 2)
 
     # Update profile goals
     updated_profile = await update_profile_goal_fields(

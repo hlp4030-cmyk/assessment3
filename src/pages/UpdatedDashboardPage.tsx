@@ -62,20 +62,28 @@ export function UpdatedDashboardPage() {
       </Card>
       <div className="grid gap-4 md:grid-cols-3">
         {goals.selectedGoals.cooking && <Card>
-          <p className="text-xl">👩‍🍳</p>
-          <p className="text-sm text-slate-500">Meals cooked this week</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">👩‍🍳</span>
+            <p className="text-lg font-semibold">Meals Cooked</p>
+          </div>
           <p className="mt-2 text-3xl font-semibold">{profileProgress.goalCooking}/{goals.weeklyMealsTarget}</p>
           <div className="mt-3"><ProgressBar value={cookingProgress} /></div>
         </Card>}
         {goals.selectedGoals.savings && <Card>
-          <p className="text-xl">💵</p>
-          <p className="text-sm text-slate-500">Savings this month</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">💵</span>
+            <p className="text-lg font-semibold">Money Saved</p>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Cost saved from replacing expired ingredients.</p>
           <p className="mt-2 text-3xl font-semibold">{formatCurrencyAU(profileProgress.goalSavings)}</p>
           <div className="mt-3"><ProgressBar value={savingsProgress} /></div>
         </Card>}
         {goals.selectedGoals.environment && <Card>
-          <p className="text-xl">🍃</p>
-          <p className="text-sm text-slate-500">Carbon emission reduced</p>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🍃</span>
+            <p className="text-lg font-semibold">CO2 Reduced</p>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Emissions prevented from food waste.</p>
           <p className="mt-2 text-3xl font-semibold">{profileProgress.goalCo2e.toFixed(2)} kg CO2e</p>
           <div className="mt-3"><ProgressBar value={environmentProgress} /></div>
         </Card>}
