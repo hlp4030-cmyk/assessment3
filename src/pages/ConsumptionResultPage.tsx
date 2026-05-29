@@ -10,6 +10,7 @@ import { Button } from '../components/ui/Button.tsx'
 import { Card } from '../components/ui/Card.tsx'
 import { SectionContainer } from '../components/ui/SectionContainer.tsx'
 import { ProgressBar } from '../components/ui/ProgressBar.tsx'
+import { Skeleton } from '../components/ui/Skeleton.tsx'
 
 const UNIT_OPTIONS = ['ea', 'g', 'ml'] as const
 const stepByUnit = (unit: string) => {
@@ -42,7 +43,7 @@ export function ConsumptionResultPage() {
 
   // DB ingredient data for dynamic pricing/CO2
   const [dbIngredients, setDbIngredients] = useState<DbIngredient[]>([])
-  const [ingredientsLoaded, setIngredientsLoaded] = useState(false)
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false)
 
   // Real baseline from DB (fetched on mount) — initialized to 0 so first-meal displays start from zero
   const [realBaseline, setRealBaseline] = useState<{ cooking: number; savings: number; co2e: number }>({ cooking: 0, savings: 0, co2e: 0 })
@@ -55,7 +56,6 @@ export function ConsumptionResultPage() {
       } catch {
         // Non-blocking
       }
-      setIngredientsLoaded(true)
     }
     void load()
   }, [])
@@ -63,7 +63,7 @@ export function ConsumptionResultPage() {
   // Fetch real profile goal values as the true "before" baseline
   useEffect(() => {
     const load = async () => {
-      if (!authSession?.accessToken) return
+      if (!authSession?.accessToken) { setInitialDataLoaded(true); return }
       try {
         const profile = await getMyProfile(authSession.accessToken)
         setRealBaseline({
@@ -74,6 +74,7 @@ export function ConsumptionResultPage() {
       } catch {
         // Non-blocking: fall back to local state if fetch fails
       }
+      setInitialDataLoaded(true)
     }
     void load()
   }, [authSession?.accessToken])
@@ -146,6 +147,41 @@ export function ConsumptionResultPage() {
     )
   }
 
+  // Loading skeleton while initial data is being fetched
+  if (!initialDataLoaded) {
+    return (
+      <SectionContainer>
+        <Card>
+          <Skeleton className="h-9 w-64 rounded-xl" />
+          <Skeleton className="mt-3 h-5 w-48 rounded-lg" />
+          <div className="mt-4 space-y-2">
+            {[...Array(selectedRecipe.required.length || 3)].map((_, i) => (
+              <div key={i} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-5 md:items-center">
+                <Skeleton className="h-10 rounded-2xl" />
+                <Skeleton className="h-10 rounded-2xl" />
+                <Skeleton className="h-10 rounded-2xl" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i}>
+                <Skeleton className="h-4 w-32 rounded" />
+                <Skeleton className="mt-2 h-5 w-40 rounded-lg" />
+                <Skeleton className="mt-3 h-2 w-full rounded-full" />
+              </Card>
+            ))}
+          </div>
+          <Skeleton className="mt-8 h-12 w-56 rounded-full" />
+        </Card>
+      </SectionContainer>
+    )
+  }
+
   const applyResult = async () => {
     if (isSubmitting) return
     if (!authSession?.accessToken) {
@@ -208,7 +244,7 @@ export function ConsumptionResultPage() {
   }
 
   return (
-    <SectionContainer><Card>
+    <SectionContainer><div className="fade-in-up"><Card>
       <h1 className="text-4xl font-semibold">Consumption Result</h1>
       <p className="mt-3 text-slate-600">Dish completed: {selectedRecipe.name}</p>
       {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
@@ -245,6 +281,6 @@ export function ConsumptionResultPage() {
         </Card>
       </div>
       <div className="mt-8"><Button onClick={applyResult} disabled={isSubmitting}>{isSubmitting ? 'Saving...' : 'Confirm and update goals'}</Button></div>
-    </Card></SectionContainer>
+    </Card></div></SectionContainer>
   )
 }

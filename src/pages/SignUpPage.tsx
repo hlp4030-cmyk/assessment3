@@ -70,18 +70,19 @@ export function SignUpPage() {
 
   return (
     <SectionContainer>
+      <div className="max-w-[420px] mx-auto">
       <Card>
         <div className="flex gap-3 mb-8">
           <button
             type="button"
-            className="flex-1 rounded-full bg-white px-6 py-3.5 text-base font-medium text-slate-500 ring-1 ring-slate-200 transition-all duration-200 hover:bg-slate-50 hover:text-slate-700 hover:ring-slate-300"
+            className="flex-1 rounded-full bg-transparent px-6 py-3.5 text-base font-medium text-slate-500 transition-all duration-200 hover:bg-slate-50 hover:text-slate-700"
             onClick={() => navigate('/login')}
           >
             Login
           </button>
           <button
             type="button"
-            className="flex-1 rounded-full bg-gradient-to-b from-emerald-500 to-emerald-600 px-6 py-3.5 text-base font-semibold text-white shadow-[0_4px_14px_rgba(16,185,129,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] transition-all duration-200"
+            className="flex-1 rounded-full bg-slate-800 px-6 py-3.5 text-base font-semibold text-white shadow-md transition-all duration-200"
           >
             Sign Up
           </button>
@@ -90,7 +91,7 @@ export function SignUpPage() {
         <form onSubmit={onSubmit} className="mt-8 space-y-5">
           <div>
             <input
-              className={`w-full rounded-2xl border p-4 text-lg ${touched.email ? (emailValid ? 'border-emerald-400' : 'border-rose-400') : 'border-slate-200'}`}
+              className={`w-full rounded-2xl border bg-slate-50 p-4 text-lg ${touched.email ? (emailValid ? 'border-emerald-400' : 'border-rose-400') : 'border-slate-200'}`}
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -102,7 +103,7 @@ export function SignUpPage() {
           <div>
             <div className="relative">
               <input
-                className={`w-full rounded-2xl border p-4 pr-12 text-lg ${touched.password ? (passwordValid ? 'border-emerald-400' : 'border-rose-400') : 'border-slate-200'}`}
+                className={`w-full rounded-2xl border bg-slate-50 p-4 pr-12 text-lg ${touched.password ? (passwordValid ? 'border-emerald-400' : 'border-rose-400') : 'border-slate-200'}`}
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Password (minimum 6 chars)"
                 value={password}
@@ -129,11 +130,13 @@ export function SignUpPage() {
                 </svg>
               </button>
             </div>
+            {touched.password && !passwordValid && password.length > 0 && <p className="mt-1 text-sm text-rose-500">Password must be at least 6 characters.</p>}
+            {touched.password && passwordValid && <p className="mt-1 text-sm text-emerald-600">✓ Password meets requirements</p>}
           </div>
           <div>
             <div className="relative">
               <input
-                className={`w-full rounded-2xl border p-4 pr-12 text-lg ${touched.confirmPassword ? (passwordsMatch ? 'border-emerald-400' : 'border-rose-400') : 'border-slate-200'}`}
+                className={`w-full rounded-2xl border bg-slate-50 p-4 pr-12 text-lg ${touched.confirmPassword ? (passwordsMatch ? 'border-emerald-400' : 'border-rose-400') : 'border-slate-200'}`}
                 type={showConfirmPassword ? 'text' : 'password'}
                 placeholder="Confirm password"
                 value={confirmPassword}
@@ -160,6 +163,8 @@ export function SignUpPage() {
                 </svg>
               </button>
             </div>
+            {touched.confirmPassword && !passwordsMatch && confirmPassword.length > 0 && <p className="mt-1 text-sm text-rose-500">Passwords do not match.</p>}
+            {touched.confirmPassword && passwordsMatch && <p className="mt-1 text-sm text-emerald-600">✓ Passwords match</p>}
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={accepted} onChange={(e) => { setAccepted(e.target.checked); setTouched((prev) => ({ ...prev, accepted: true })) }} />
@@ -171,6 +176,7 @@ export function SignUpPage() {
         </form>
         <Link to="/welcome" className="mt-4 inline-block"><Button variant="ghost">Back</Button></Link>
       </Card>
+      </div>
     </SectionContainer>
   )
 }

@@ -9,6 +9,7 @@ import { getIngredientImageUrl, getIngredientEmoji } from '../utils/ingredientIm
 import { Button } from '../components/ui/Button.tsx'
 import { Card } from '../components/ui/Card.tsx'
 import { SectionContainer } from '../components/ui/SectionContainer.tsx'
+import { Skeleton, SkeletonText, SkeletonCircle } from '../components/ui/Skeleton.tsx'
 
 const DEFAULT_QUICK_ADD_NAMES = [
   'Oats', 'Rice', 'Pasta', 'Loaf Bread', 'Milk', 'Cheese', 'Yogurt', 'Eggs',
@@ -400,14 +401,40 @@ export function IngredientInputPage() {
   if (!ingredientsLoaded) {
     return (
       <SectionContainer>
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Search Card Skeleton */}
+          <Card>
+            <Skeleton className="h-7 w-40 rounded-lg" />
+            <Skeleton className="mt-3 h-11 w-full rounded-xl" />
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="h-8 w-24 rounded-full" />
+              ))}
+            </div>
+            <SkeletonText className="mt-4" lines={4} widths={['w-full', 'w-5/6', 'w-3/4', 'w-1/2']} />
+          </Card>
+          {/* Quick Add Card Skeleton */}
+          <Card>
+            <Skeleton className="h-7 w-32 rounded-lg" />
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <SkeletonCircle size={48} className="rounded-lg" />
+                    <Skeleton className="h-4 w-20 rounded" />
+                  </div>
+                  <Skeleton className="h-3 w-16 rounded" />
+                  <Skeleton className="h-8 w-full rounded-lg" />
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+        {/* Confirmation Tray Skeleton */}
         <Card>
-          <h2 className="text-2xl font-semibold">Search Ingredients</h2>
-          <div className="mt-6 space-y-3">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-10 w-full animate-pulse rounded-xl bg-slate-200" />
-            ))}
-          </div>
-          <p className="mt-4 text-sm text-slate-400">Loading ingredient catalog...</p>
+          <Skeleton className="h-7 w-48 rounded-lg" />
+          <Skeleton className="mt-2 h-4 w-72 rounded" />
+          <Skeleton className="mt-4 h-10 w-44 rounded-full" />
         </Card>
       </SectionContainer>
     )
@@ -428,7 +455,7 @@ export function IngredientInputPage() {
 
   return (
     <SectionContainer>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="fade-in-up grid gap-6 md:grid-cols-2">
         <Card>
           <h2 className="text-2xl font-semibold">Search Ingredients</h2>
           <div className="mt-3 flex items-center rounded-xl border border-slate-400 bg-white p-2">
@@ -538,7 +565,14 @@ export function IngredientInputPage() {
           {!quickAddLoaded ? (
             <div className="mt-4 grid grid-cols-2 gap-3">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-20 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />
+                <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <SkeletonCircle size={48} className="rounded-lg" />
+                    <Skeleton className="h-4 w-20 rounded" />
+                  </div>
+                  <Skeleton className="h-3 w-16 rounded" />
+                  <Skeleton className="h-8 w-full rounded-lg" />
+                </div>
               ))}
             </div>
           ) : (

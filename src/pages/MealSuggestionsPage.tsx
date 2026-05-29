@@ -5,6 +5,7 @@ import type { DbRecipe, Recipe } from '../types/models.ts'
 import { fetchRecipes } from '../lib/backendApi.ts'
 import { hasEnoughWithUnitConversion } from '../domain/rewards/rewardEngine.ts'
 import { getRecipeImageUrl } from '../utils/ingredientImages.ts'
+import { Skeleton } from '../components/ui/Skeleton.tsx'
 
 /** Convert a DbRecipe to the legacy Recipe shape used by CookingGuidePage */
 const toLegacyRecipe = (r: DbRecipe): Recipe => ({
@@ -82,17 +83,22 @@ export function MealSuggestionsPage() {
     return (
       <section className="space-y-6">
         <div className="glass-card p-8">
-          <h1 className="hero-title text-5xl font-semibold">Hi {user.nickname || 'there'}, let's cook something delicious!</h1>
-          <p className="mt-4 text-slate-500">Loading recipes...</p>
+          <Skeleton className="h-12 w-3/5 rounded-xl" />
+          <Skeleton className="mt-4 h-5 w-2/5 rounded-lg" />
+          <div className="mt-4 flex gap-3">
+            <Skeleton className="h-10 w-32 rounded-xl" />
+            <Skeleton className="h-10 w-48 rounded-xl" />
+          </div>
         </div>
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="glass-card overflow-hidden">
-              <div className="h-40 w-full animate-pulse bg-slate-200" />
+              <Skeleton className="h-40 w-full rounded-none" />
               <div className="p-6 space-y-3">
-                <div className="h-6 w-3/4 animate-pulse rounded bg-slate-200" />
-                <div className="h-4 w-1/2 animate-pulse rounded bg-slate-200" />
-                <div className="h-8 w-24 animate-pulse rounded-full bg-slate-200" />
+                <Skeleton className="h-6 w-3/4 rounded-lg" />
+                <Skeleton className="h-4 w-full rounded" />
+                <Skeleton className="h-4 w-2/3 rounded" />
+                <Skeleton className="h-9 w-28 rounded-full" />
               </div>
             </div>
           ))}
@@ -115,7 +121,7 @@ export function MealSuggestionsPage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="fade-in-up space-y-6">
       <div className="glass-card p-8">
         <h1 className="hero-title text-5xl font-semibold">Hi {user.nickname || 'there'}, let's cook something delicious!</h1>
         <div className="mt-4 flex flex-wrap items-center gap-3">

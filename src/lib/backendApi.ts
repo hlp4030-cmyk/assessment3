@@ -341,9 +341,30 @@ export async function markItemWasted(accessToken: string, itemId: string): Promi
   return data as WasteResponse
 }
 
+// ── Master Data Cache ──
+// Master data (ingredients & recipes) changes rarely. Cache in memory to
+// eliminate redundant Supabase round-trips when the user navigates between
+// pages that both need the same dataset.
+
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+}
+
+const MASTER_DATA_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+const ingredientsCache: { current: CacheEntry<DbIngredient[]> | null } = { current: null }
+const recipesCache: { current: CacheEntry<DbRecipe[]> | null } = { current: null }
+
+function isValid<T>(entry: CacheEntry<T> | null): entry is CacheEntry<T> {
+  return entry !== null && Date.now() - entry.timestamp < MASTER_DATA_TTL_MS
+}
+
 // ── Master Data API (public, no auth required) ──
 
 export async function fetchIngredients(): Promise<DbIngredient[]> {
+  if (isValid(ingredientsCache.current)) return ingredientsCache.current.data
+
   const response = await fetch(`${BACKEND_BASE_URL}/api/ingredients`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
@@ -353,10 +374,13 @@ export async function fetchIngredients(): Promise<DbIngredient[]> {
   if (!response.ok) {
     throw new Error(extractErrorMessage((data as { detail?: unknown }).detail, 'Failed to fetch ingredients'))
   }
+  ingredientsCache.current = { data: data as DbIngredient[], timestamp: Date.now() }
   return data as DbIngredient[]
 }
 
 export async function fetchRecipes(): Promise<DbRecipe[]> {
+  if (isValid(recipesCache.current)) return recipesCache.current.data
+
   const response = await fetch(`${BACKEND_BASE_URL}/api/recipes`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
@@ -366,5 +390,6 @@ export async function fetchRecipes(): Promise<DbRecipe[]> {
   if (!response.ok) {
     throw new Error(extractErrorMessage((data as { detail?: unknown }).detail, 'Failed to fetch recipes'))
   }
+  recipesCache.current = { data: data as DbRecipe[], timestamp: Date.now() }
   return data as DbRecipe[]
 }

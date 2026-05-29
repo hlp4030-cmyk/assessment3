@@ -4,6 +4,7 @@ import { useAppState } from '../context/useAppState.ts'
 import { deleteMyFridgeItem, fetchIngredients, getMyFridgeItems, markItemWasted, updateMyFridgeItem } from '../lib/backendApi.ts'
 import { formatDateAU } from '../utils/formatters.ts'
 import { getIngredientImageUrl } from '../utils/ingredientImages.ts'
+import { Skeleton } from '../components/ui/Skeleton.tsx'
 import { groupByName } from '../utils/fridgeGrouping.ts'
 import type { FridgeGroup } from '../utils/fridgeGrouping.ts'
 import type { Ingredient } from '../types/models.ts'
@@ -308,7 +309,7 @@ export function MyFridgePage() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="fade-in-up space-y-6">
       <div className="glass-card p-8">
         <h1 className="hero-title text-5xl font-semibold">{user.nickname || 'My'}'s Fridge</h1>
         <p className="mt-2 text-slate-600">Track what's fresh and what needs using soon.</p>
@@ -377,17 +378,17 @@ export function MyFridgePage() {
           <div key={item.id} className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="flex">
               <div className="flex w-1/3 items-center justify-center p-4">
-                <div className="h-28 w-full animate-pulse rounded-2xl bg-slate-200" />
+                <Skeleton className="h-28 w-full rounded-2xl" />
               </div>
               <div className="flex w-2/3 flex-col justify-between p-5 pl-0">
                 <div>
-                  <div className="h-6 w-24 animate-pulse rounded-lg bg-slate-200" />
-                  <div className="mt-2 h-5 w-36 animate-pulse rounded-full bg-slate-200" />
+                  <Skeleton className="h-6 w-24 rounded-lg" />
+                  <Skeleton className="mt-2 h-5 w-36 rounded-full" />
                 </div>
                 <div className="mt-3 flex gap-3">
-                  <div className="h-8 w-8 animate-pulse rounded-full bg-slate-200" />
-                  <div className="h-6 w-16 animate-pulse rounded bg-slate-200" />
-                  <div className="h-8 w-8 animate-pulse rounded-full bg-slate-200" />
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <Skeleton className="h-6 w-16 rounded" />
+                  <Skeleton className="h-8 w-8 rounded-full" />
                 </div>
               </div>
             </div>
