@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAppState } from '../context/useAppState.ts'
@@ -16,6 +16,15 @@ export function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({})
+  const [sessionExpired, setSessionExpired] = useState(false)
+
+  // Check for session expiry flag set by AppProviders
+  useEffect(() => {
+    if (sessionStorage.getItem('eatup-session-expired') === 'true') {
+      setSessionExpired(true)
+      sessionStorage.removeItem('eatup-session-expired')
+    }
+  }, [])
 
   const emailValid = /\S+@\S+\.\S+/.test(email)
   const passwordValid = password.length >= 6
@@ -150,6 +159,11 @@ export function LoginPage() {
             {touched.password && !passwordValid && password.length > 0 && <p className="mt-1 text-sm text-rose-500">Password must be at least 6 characters.</p>}
             {touched.password && passwordValid && <p className="mt-1 text-sm text-emerald-600">✓ Password meets requirements</p>}
           </div>
+          {sessionExpired && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm text-amber-700">For your security, please log in again to continue.</p>
+            </div>
+          )}
           {error && <p className="text-sm text-rose-600">{error}</p>}
           <Button full disabled={isSubmitting}>{isSubmitting ? 'Signing in...' : 'Continue'}</Button>
         </form>

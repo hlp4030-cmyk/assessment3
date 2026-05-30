@@ -1,7 +1,9 @@
-import { createContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { PropsWithChildren } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { AuthSession, GoalState, Ingredient, Recipe, RewardState, UserProfile } from '../types/models.ts'
+import { getMyProfile } from '../lib/backendApi.ts'
 
 interface AppStateContextValue {
   isAuthenticated: boolean
@@ -52,6 +54,8 @@ const defaultRewards: RewardState = {
 export const AppStateContext = createContext<AppStateContextValue | null>(null)
 
 export function AppProviders({ children }: PropsWithChildren) {
+  const navigate = useNavigate()
+  const sessionCheckDone = useRef(false)
   const [isAuthenticated, setIsAuthenticated] = useState(() => JSON.parse(localStorage.getItem('eatup-auth') ?? 'false'))
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => JSON.parse(localStorage.getItem('eatup-session') ?? 'null'))
   const [user, setUser] = useState<UserProfile>(() => JSON.parse(localStorage.getItem('eatup-user') ?? 'null') ?? defaultUser)
@@ -106,6 +110,37 @@ export function AppProviders({ children }: PropsWithChildren) {
     localStorage.setItem('eatup-rewards', JSON.stringify(rewards))
     localStorage.setItem('eatup-inventory', JSON.stringify(inventory))
   }, [isAuthenticated, authSession, user, goals, rewards, inventory])
+
+  // ── Session validity check on mount ──
+  // If localStorage says we're authenticated, verify the token is still valid
+  // by making a lightweight API call. If it fails, clean up and redirect to login.
+  useEffect(() => {
+    if (sessionCheckDone.current) return
+    sessionCheckDone.current = true
+
+    const checkSession = async () => {
+      // Only check if localStorage says authenticated and we have a token
+      const storedAuth = JSON.parse(localStorage.getItem('eatup-auth') ?? 'false') as boolean
+      const storedSession = JSON.parse(localStorage.getItem('eatup-session') ?? 'null') as AuthSession | null
+      if (!storedAuth || !storedSession?.accessToken) return
+
+      try {
+        await getMyProfile(storedSession.accessToken)
+      } catch {
+        // Token is expired or invalid — perform a clean logout
+        sessionStorage.setItem('eatup-session-expired', 'true')
+        setIsAuthenticated(false)
+        setAuthSession(null)
+        setUser(defaultUser)
+        setGoals(defaultGoals)
+        setRewards(defaultRewards)
+        setInventory([])
+        navigate('/login', { replace: true })
+      }
+    }
+
+    void checkSession()
+  }, [navigate, setIsAuthenticated, setAuthSession, setUser, setGoals, setRewards, setInventory])
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>
 }

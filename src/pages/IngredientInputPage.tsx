@@ -76,9 +76,14 @@ export function IngredientInputPage() {
   // Multiple dynamic edit rows (supports stacking selections)
   const [editRows, setEditRows] = useState<EditRow[]>([])
 
-  // DB-driven Quick Add
-  const [quickAddSettings, setQuickAddSettings] = useState<Record<string, { quantity: number; unit: string }>>({})
-  const [quickAddLoaded, setQuickAddLoaded] = useState(false)
+  // DB-driven Quick Add — initialize with hardcoded defaults for instant rendering
+  const [quickAddSettings, setQuickAddSettings] = useState<Record<string, { quantity: number; unit: string }>>(() => {
+    const defaults: Record<string, { quantity: number; unit: string }> = {}
+    for (const name of DEFAULT_QUICK_ADD_NAMES) {
+      defaults[toTitleCase(name)] = { quantity: 1, unit: 'ea' }
+    }
+    return defaults
+  })
   const [editQuickAddMode, setEditQuickAddMode] = useState(false)
   const [addNewQuickAdd, setAddNewQuickAdd] = useState('')
 
@@ -132,14 +137,14 @@ export function IngredientInputPage() {
     void load()
   }, [])
 
-  // Fetch Quick Add settings from DB on mount
+  // Fetch Quick Add settings from DB on mount (runs in parallel with fetchIngredients)
   useEffect(() => {
     const load = async () => {
-      if (!authSession?.accessToken) { setQuickAddLoaded(true); return }
+      if (!authSession?.accessToken) return
       try {
         const rows = await getQuickAddSettings(authSession.accessToken)
 
-        // Build default quick add from DB ingredients
+        // Build default quick add from DB ingredients (if available)
         const defaultQuickAdd = DEFAULT_QUICK_ADD_NAMES
           .map((name) => {
             const db = dbIngredients.find((ing) => ing.name.toLowerCase() === name.toLowerCase())
@@ -164,22 +169,15 @@ export function IngredientInputPage() {
           merged[key] = { quantity: row.default_quantity, unit: row.unit }
         }
 
-        setQuickAddSettings(merged)
-      } catch {
-        // Fallback: build defaults from DB ingredients
-        const map: Record<string, { quantity: number; unit: string }> = {}
-        for (const name of DEFAULT_QUICK_ADD_NAMES) {
-          const db = dbIngredients.find((ing) => ing.name.toLowerCase() === name.toLowerCase())
-          if (db) {
-            map[toTitleCase(db.name)] = { quantity: db.default_quantity, unit: db.standard_unit }
-          }
+        if (Object.keys(merged).length > 0) {
+          setQuickAddSettings(merged)
         }
-        setQuickAddSettings(map)
+      } catch {
+        // Keep the hardcoded defaults already in state
       }
-      setQuickAddLoaded(true)
     }
-    if (ingredientsLoaded) void load()
-  }, [authSession?.accessToken, ingredientsLoaded, dbIngredients])
+    void load()
+  }, [authSession?.accessToken, dbIngredients])
 
   // Quick add names derived from settings
   const quickAddNames = useMemo(() => Object.keys(quickAddSettings), [quickAddSettings])
@@ -231,12 +229,24 @@ export function IngredientInputPage() {
     ])
   }
 
-  // Open edit row for search/category item — stacks onto editRows array
+  // Toggle edit row for search/category item — stacks onto editRows array or removes if already selected
   const openEditRow = (name: string) => {
-    // Don't add duplicate if already in edit rows
-    if (editRowNames.has(name.toLowerCase())) return
+    const lowerName = name.toLowerCase()
 
-    const db = ingredientByName[name.toLowerCase()]
+    // If already in edit rows, deselect by removing it
+    if (editRowNames.has(lowerName)) {
+      setEditRows((prev) => prev.filter((r) => r.name.toLowerCase() !== lowerName))
+      return
+    }
+
+    // If already confirmed into pending tray, deselect by removing from pending and selectedAuto
+    if (selectedAuto.includes(toTitleCase(name))) {
+      setSelectedAuto((prev) => prev.filter((n) => n.toLowerCase() !== lowerName))
+      setPending((prev) => prev.filter((p) => p.name.toLowerCase() !== lowerName))
+      return
+    }
+
+    const db = ingredientByName[lowerName]
     const today = new Date().toISOString().slice(0, 10)
     const newRow: EditRow = {
       name: toTitleCase(name),
@@ -562,108 +572,100 @@ export function IngredientInputPage() {
             )}
           </div>
 
-          {!quickAddLoaded ? (
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {quickAddNames.map((name) => {
+              const settings = quickAddSettings[name]
+              if (!settings) return null
+              const db = ingredientByName[name.toLowerCase()]
+              return (
+                <div key={name} className={`rounded-2xl border p-4 text-left transition-colors ${editQuickAddMode ? 'border-emerald-300 bg-emerald-50/30' : 'border-emerald-200'}`}>
                   <div className="flex items-center gap-2">
-                    <SkeletonCircle size={48} className="rounded-lg" />
-                    <Skeleton className="h-4 w-20 rounded" />
-                  </div>
-                  <Skeleton className="h-3 w-16 rounded" />
-                  <Skeleton className="h-8 w-full rounded-lg" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              {quickAddNames.map((name) => {
-                const settings = quickAddSettings[name]
-                if (!settings) return null
-                const db = ingredientByName[name.toLowerCase()]
-                return (
-                  <div key={name} className={`rounded-2xl border p-4 text-left transition-colors ${editQuickAddMode ? 'border-emerald-300 bg-emerald-50/30' : 'border-emerald-200'}`}>
-                    <div className="flex items-center gap-2">
+                    {ingredientsLoaded && db ? (
                       <img
-                        src={getIngredientImageUrl(name, db?.image_url)}
+                        src={getIngredientImageUrl(name, db.image_url)}
                         alt={name}
                         className="w-12 h-12 object-contain shrink-0 rounded-lg bg-slate-50"
                         onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden') }}
                       />
-                      <span className="text-2xl hidden">{getIngredientEmoji(db?.category)}</span>
-                      <span className="font-medium text-sm leading-tight">{name}</span>
-                    </div>
-                    {editQuickAddMode ? (
-                      <>
-                        <div className="mt-2 flex items-center gap-1.5">
-                          <button className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-600 hover:bg-slate-100" onClick={() => {
-                            const newQty = Math.max(0, settings.quantity - stepByUnit(settings.unit))
-                            setQuickAddSettings((prev) => ({ ...prev, [name]: { ...prev[name], quantity: newQty } }))
-                            void saveQuickAddSetting(name, newQty, settings.unit)
-                          }}>−</button>
-                          <input type="number" min={0} step={stepByUnit(settings.unit)} value={settings.quantity} onChange={(e) => {
-                            const newQty = Number(e.target.value) || 0
-                            setQuickAddSettings((prev) => ({ ...prev, [name]: { ...prev[name], quantity: newQty } }))
-                          }} onBlur={() => saveQuickAddSetting(name, settings.quantity, settings.unit)} className="w-12 rounded-lg border border-slate-200 px-1 py-0.5 text-center text-xs text-slate-800" />
-                          <button className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-600 hover:bg-slate-100" onClick={() => {
-                            const newQty = settings.quantity + stepByUnit(settings.unit)
-                            setQuickAddSettings((prev) => ({ ...prev, [name]: { ...prev[name], quantity: newQty } }))
-                            void saveQuickAddSetting(name, newQty, settings.unit)
-                          }}>+</button>
-                          <span className="text-xs text-slate-500">{settings.unit}</span>
-                        </div>
-                        <button className="mt-2 text-xs font-medium text-rose-500 hover:text-rose-700" onClick={() => {
-                          setQuickAddSettings((prev) => { const next = { ...prev }; delete next[name]; return next })
-                          void removeQuickAddSetting(name)
-                        }}>✕ Remove</button>
-                      </>
                     ) : (
-                      <>
-                        <p className="text-sm text-slate-500">{settings.quantity} {settings.unit}</p>
-                        {pendingNames.has(name.toLowerCase()) ? (
-                          <button className="mt-2 w-full rounded-lg border border-emerald-300 bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 cursor-default" disabled>
-                            ✓ In Tray
-                          </button>
-                        ) : (
-                          <button
-                            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95"
-                            onClick={() => quickAddClick(name)}
-                          >
-                            + Add to tray
-                          </button>
-                        )}
-                      </>
+                      <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-50 text-2xl shrink-0">{getIngredientEmoji(db?.category)}</span>
                     )}
+                    <span className="text-2xl hidden">{getIngredientEmoji(db?.category)}</span>
+                    <span className="font-medium text-sm leading-tight">{name}</span>
                   </div>
-                )
-              })}
-              {/* Add New card in edit mode */}
-              {editQuickAddMode && (
-                <div className="rounded-2xl border-2 border-dashed border-slate-300 p-4">
-                  <p className="text-sm font-medium text-slate-600">+ Add New</p>
-                  <div className="mt-2 flex flex-col gap-1">
-                    <select
-                      value={addNewQuickAdd}
-                      onChange={(e) => setAddNewQuickAdd(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-800"
-                    >
-                      <option value="">Select ingredient...</option>
-                      {availableNewQuickAdd.map((name) => (
-                        <option key={name} value={name}>{name}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => void addNewQuickAddItem()}
-                      disabled={!addNewQuickAdd}
-                      className="rounded-lg bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Add
-                    </button>
-                  </div>
+                  {editQuickAddMode ? (
+                    <>
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <button className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-600 hover:bg-slate-100" onClick={() => {
+                          const newQty = Math.max(0, settings.quantity - stepByUnit(settings.unit))
+                          setQuickAddSettings((prev) => ({ ...prev, [name]: { ...prev[name], quantity: newQty } }))
+                          void saveQuickAddSetting(name, newQty, settings.unit)
+                        }}>−</button>
+                        <input type="number" min={0} step={stepByUnit(settings.unit)} value={settings.quantity} onChange={(e) => {
+                          const newQty = Number(e.target.value) || 0
+                          setQuickAddSettings((prev) => ({ ...prev, [name]: { ...prev[name], quantity: newQty } }))
+                        }} onBlur={() => saveQuickAddSetting(name, settings.quantity, settings.unit)} className="w-12 rounded-lg border border-slate-200 px-1 py-0.5 text-center text-xs text-slate-800" />
+                        <button className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-xs text-slate-600 hover:bg-slate-100" onClick={() => {
+                          const newQty = settings.quantity + stepByUnit(settings.unit)
+                          setQuickAddSettings((prev) => ({ ...prev, [name]: { ...prev[name], quantity: newQty } }))
+                          void saveQuickAddSetting(name, newQty, settings.unit)
+                        }}>+</button>
+                        <span className="text-xs text-slate-500">{settings.unit}</span>
+                      </div>
+                      <button className="mt-2 text-xs font-medium text-rose-500 hover:text-rose-700" onClick={() => {
+                        setQuickAddSettings((prev) => { const next = { ...prev }; delete next[name]; return next })
+                        void removeQuickAddSetting(name)
+                      }}>✕ Remove</button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-slate-500">{settings.quantity} {settings.unit}</p>
+                      {pendingNames.has(name.toLowerCase()) ? (
+                        <button
+                          className="mt-2 w-full rounded-lg border border-emerald-300 bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 active:scale-95"
+                          onClick={() => setPending((prev) => prev.filter((p) => p.name.toLowerCase() !== name.toLowerCase()))}
+                        >
+                          ✓ In Tray
+                        </button>
+                      ) : (
+                        <button
+                          className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-600 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95"
+                          onClick={() => quickAddClick(name)}
+                        >
+                          + Add to tray
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
+              )
+            })}
+            {/* Add New card in edit mode */}
+            {editQuickAddMode && (
+              <div className="rounded-2xl border-2 border-dashed border-slate-300 p-4">
+                <p className="text-sm font-medium text-slate-600">+ Add New</p>
+                <div className="mt-2 flex flex-col gap-1">
+                  <select
+                    value={addNewQuickAdd}
+                    onChange={(e) => setAddNewQuickAdd(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-800"
+                  >
+                    <option value="">Select ingredient...</option>
+                    {availableNewQuickAdd.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => void addNewQuickAddItem()}
+                    disabled={!addNewQuickAdd}
+                    className="rounded-lg bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </Card>
       </div>
 
@@ -684,14 +686,17 @@ export function IngredientInputPage() {
         </div>
         <div className="mt-5 flex flex-wrap gap-3">
           {isApplying && saveProgress ? (
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-48 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-emerald-600 transition-all duration-300"
-                  style={{ width: `${(saveProgress.current / saveProgress.total) * 100}%` }}
-                />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-3">
+                <div className="h-2 w-48 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-emerald-600 transition-all duration-300"
+                    style={{ width: `${(saveProgress.current / saveProgress.total) * 100}%` }}
+                  />
+                </div>
+                <span className="text-sm font-medium text-emerald-700">Saving {saveProgress.current}/{saveProgress.total} items...</span>
               </div>
-              <span className="text-sm font-medium text-emerald-700">Saving {saveProgress.current}/{saveProgress.total} items...</span>
+              <p className="text-xs text-slate-400">You can safely leave this page; saving will continue in the background.</p>
             </div>
           ) : (
             <Button onClick={applyToFridge} disabled={pending.length === 0} loading={isApplying} loadingText="Saving...">Save to My Fridge</Button>
