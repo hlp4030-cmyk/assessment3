@@ -25,3 +25,7 @@ dist-ssr
 .env
 .venv
 backend/.venv/
+backend/scripts/test_upload.py
+backend/scripts/seed_recipe_images.py
+backend/scripts/verify_images.py
+backend/scripts/tmp_images/
