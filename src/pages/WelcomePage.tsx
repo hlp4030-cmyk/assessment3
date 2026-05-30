@@ -9,13 +9,13 @@ export function WelcomePage() {
       <Card>
         <div className="grid gap-6 lg:grid-cols-2 lg:items-center">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Welcome to eat it up</p>
+            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Ready to eat it up?</p>
             <h1 className="mt-3 text-6xl font-semibold tracking-tight text-slate-900">
               Don't waste it,
               <br />
               <span className="text-emerald-600">eat it up!</span>
             </h1>
-            <p className="mt-4 max-w-3xl text-xl leading-relaxed text-slate-600">AI-Driven Inventory Management and Meal Planning</p>
+            <p className="mt-4 max-w-3xl text-xl leading-relaxed text-slate-600">Smart Fridge Tracking & Effortless Meal Ideas</p>
             <Link to="/login" className="mt-8 inline-block"><Button>Get Started</Button></Link>
           </div>
           <img
