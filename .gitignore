@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 .env
 .venv
+
+# Backend
 backend/.venv/
 backend/scripts/test_upload.py
 backend/scripts/seed_recipe_images.py

@@ -70,6 +70,7 @@ export function IngredientInputPage() {
   const [dbIngredients, setDbIngredients] = useState<DbIngredient[]>([])
   const [ingredientsLoaded, setIngredientsLoaded] = useState(false)
   const [ingredientsError, setIngredientsError] = useState('')
+  const [quickAddLoaded, setQuickAddLoaded] = useState(false)
 
   // Category filter
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
@@ -137,10 +138,15 @@ export function IngredientInputPage() {
     void load()
   }, [])
 
-  // Fetch Quick Add settings from DB on mount (runs in parallel with fetchIngredients)
+  // Fetch Quick Add settings from DB (waits for ingredient catalog first)
   useEffect(() => {
     const load = async () => {
-      if (!authSession?.accessToken) return
+      // Don't run until ingredients are loaded — we need dbIngredients to build correct defaults
+      if (!ingredientsLoaded) return
+      if (!authSession?.accessToken) {
+        setQuickAddLoaded(true)
+        return
+      }
       try {
         const rows = await getQuickAddSettings(authSession.accessToken)
 
@@ -174,10 +180,12 @@ export function IngredientInputPage() {
         }
       } catch {
         // Keep the hardcoded defaults already in state
+      } finally {
+        setQuickAddLoaded(true)
       }
     }
     void load()
-  }, [authSession?.accessToken, dbIngredients])
+  }, [authSession?.accessToken, dbIngredients, ingredientsLoaded])
 
   // Quick add names derived from settings
   const quickAddNames = useMemo(() => Object.keys(quickAddSettings), [quickAddSettings])
@@ -565,15 +573,28 @@ export function IngredientInputPage() {
         <Card>
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Quick Add</h2>
-            {!editQuickAddMode ? (
+            {quickAddLoaded && !editQuickAddMode ? (
               <button onClick={() => setEditQuickAddMode(true)} className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100">✏️ Edit Quick Add</button>
-            ) : (
+            ) : quickAddLoaded ? (
               <button onClick={() => setEditQuickAddMode(false)} className="rounded-full border border-emerald-300 bg-emerald-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-emerald-700">✓ Done</button>
-            )}
+            ) : null}
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            {quickAddNames.map((name) => {
+            {!quickAddLoaded ? (
+              <>
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <SkeletonCircle size={48} className="rounded-lg" />
+                      <Skeleton className="h-4 w-20 rounded" />
+                    </div>
+                    <Skeleton className="h-3 w-16 rounded" />
+                    <Skeleton className="h-8 w-full rounded-lg" />
+                  </div>
+                ))}
+              </>
+            ) : quickAddNames.map((name) => {
               const settings = quickAddSettings[name]
               if (!settings) return null
               const db = ingredientByName[name.toLowerCase()]
