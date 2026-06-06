@@ -44,36 +44,36 @@ export function Navbar() {
               {link.label}
             </NavLink>
           ))}
-          <div className="relative ml-1 shrink-0 sm:ml-2">
-            <button
-              aria-label="Profile"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700"
-              onClick={() => setProfileOpen((s) => !s)}
-            >
-              {((app?.user?.nickname?.[0] ?? 'U') as string).toUpperCase()}
-            </button>
-            {profileOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setProfileOpen(false)} />
-                <div className="absolute right-0 top-11 z-20 w-56 rounded-xl border border-slate-200 bg-white shadow-lg">
-                  <div className="px-4 py-3 text-sm text-slate-500 border-b border-slate-100">{app?.authSession?.email ?? 'anonymous'}</div>
-                  <Link
-                    to="/my-profile"
-                    className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition"
-                    onClick={() => setProfileOpen(false)}
-                  >
-                    Manage Account
-                  </Link>
-                  <button
-                    className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition rounded-b-xl"
-                    onClick={signOut}
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+        </div>
+        <div className="relative ml-1 shrink-0 sm:ml-2">
+          <button
+            aria-label="Profile"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700"
+            onClick={() => setProfileOpen((s) => !s)}
+          >
+            {((app?.user?.nickname?.[0] ?? 'U') as string).toUpperCase()}
+          </button>
+          {profileOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setProfileOpen(false)} />
+              <div className="absolute right-0 top-11 z-20 w-56 rounded-xl border border-slate-200 bg-white shadow-lg">
+                <div className="px-4 py-3 text-sm text-slate-500 border-b border-slate-100">{app?.authSession?.email ?? 'anonymous'}</div>
+                <Link
+                  to="/my-profile"
+                  className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition"
+                  onClick={() => setProfileOpen(false)}
+                >
+                  Manage Account
+                </Link>
+                <button
+                  className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition rounded-b-xl"
+                  onClick={signOut}
+                >
+                  Sign Out
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </nav>
