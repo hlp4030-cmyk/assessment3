@@ -434,7 +434,7 @@ export function IngredientInputPage() {
           {/* Quick Add Card Skeleton */}
           <Card>
             <Skeleton className="h-7 w-32 rounded-lg" />
-            <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
                   <div className="flex items-center gap-2">
@@ -580,7 +580,7 @@ export function IngredientInputPage() {
             ) : null}
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {!quickAddLoaded ? (
               <>
                 {[...Array(6)].map((_, i) => (
@@ -600,19 +600,19 @@ export function IngredientInputPage() {
               const db = ingredientByName[name.toLowerCase()]
               return (
                 <div key={name} className={`rounded-2xl border p-4 text-left transition-colors ${editQuickAddMode ? 'border-emerald-300 bg-emerald-50/30' : 'border-emerald-200'}`}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     {ingredientsLoaded && db ? (
                       <img
                         src={getIngredientImageUrl(name, db.image_url)}
                         alt={name}
-                        className="w-12 h-12 object-contain shrink-0 rounded-lg bg-slate-50"
+                        className="h-10 w-10 sm:h-12 sm:w-12 object-contain shrink-0 rounded-lg bg-slate-50"
                         onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden') }}
                       />
                     ) : (
-                      <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-50 text-2xl shrink-0">{getIngredientEmoji(db?.category)}</span>
+                      <span className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg bg-slate-50 text-xl sm:text-2xl shrink-0">{getIngredientEmoji(db?.category)}</span>
                     )}
-                    <span className="text-2xl hidden">{getIngredientEmoji(db?.category)}</span>
-                    <span className="font-medium text-sm leading-tight">{name}</span>
+                    <span className="text-xl sm:text-2xl hidden">{getIngredientEmoji(db?.category)}</span>
+                    <span className="font-medium text-xs sm:text-sm leading-tight truncate">{name}</span>
                   </div>
                   {editQuickAddMode ? (
                     <>

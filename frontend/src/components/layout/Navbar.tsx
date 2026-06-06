@@ -28,23 +28,23 @@ export function Navbar() {
 
   return (
     <nav className="sticky top-0 z-20 border-b border-emerald-100/70 bg-white/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
-        <div className="flex items-center gap-3">
-          <p className="text-xl font-semibold tracking-tight text-emerald-700">eat it up</p>
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-10">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <p className="text-lg font-semibold tracking-tight text-emerald-700 sm:text-xl">eat it up</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center justify-end overflow-x-auto gap-1.5 sm:gap-2">
           {links.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
               className={({ isActive }) =>
-                `rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${isActive ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'}`
+                `shrink-0 rounded-full px-2.5 py-1.5 text-xs font-medium transition-all duration-200 sm:px-4 sm:py-2 sm:text-sm ${isActive ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'}`
               }
             >
               {link.label}
             </NavLink>
           ))}
-          <div className="relative ml-2">
+          <div className="relative ml-1 shrink-0 sm:ml-2">
             <button
               aria-label="Profile"
               className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700"
