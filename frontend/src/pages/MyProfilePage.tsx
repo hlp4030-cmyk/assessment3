@@ -170,7 +170,7 @@ export function MyProfilePage() {
         </div>
         {/* Danger Zone */}
         <div className="mt-10 border-t border-slate-200 pt-6">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Danger Zone</h2>
+          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Security & Privacy</h2>
           <p className="mt-1 text-sm text-slate-500">
             Permanently delete your account and all associated data. This action cannot be undone.
           </p>
