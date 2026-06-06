@@ -20,6 +20,8 @@ interface AppStateContextValue {
   setInventory: Dispatch<SetStateAction<Ingredient[]>>
   selectedRecipe: Recipe | null
   setSelectedRecipe: Dispatch<SetStateAction<Recipe | null>>
+  keepLoggedIn: boolean
+  setKeepLoggedIn: Dispatch<SetStateAction<boolean>>
 }
 
 const defaultUser: UserProfile = {
@@ -53,15 +55,26 @@ const defaultRewards: RewardState = {
 
 export const AppStateContext = createContext<AppStateContextValue | null>(null)
 
+// Helper to read from the appropriate storage based on keepLoggedIn preference
+function readStoredAuth(key: string, keepLoggedIn: boolean): string | null {
+  if (keepLoggedIn) {
+    return localStorage.getItem(key)
+  }
+  // When keepLoggedIn is false, prefer sessionStorage, fall back to localStorage
+  // (handles the case where user previously logged in with keepLoggedIn=true)
+  return sessionStorage.getItem(key) ?? localStorage.getItem(key)
+}
+
 export function AppProviders({ children }: PropsWithChildren) {
   const navigate = useNavigate()
   const sessionCheckDone = useRef(false)
-  const [isAuthenticated, setIsAuthenticated] = useState(() => JSON.parse(localStorage.getItem('eatup-auth') ?? 'false'))
-  const [authSession, setAuthSession] = useState<AuthSession | null>(() => JSON.parse(localStorage.getItem('eatup-session') ?? 'null'))
-  const [user, setUser] = useState<UserProfile>(() => JSON.parse(localStorage.getItem('eatup-user') ?? 'null') ?? defaultUser)
-  const [goals, setGoals] = useState<GoalState>(() => JSON.parse(localStorage.getItem('eatup-goals') ?? 'null') ?? defaultGoals)
-  const [rewards, setRewards] = useState<RewardState>(() => JSON.parse(localStorage.getItem('eatup-rewards') ?? 'null') ?? defaultRewards)
-  const [inventory, setInventory] = useState<Ingredient[]>(() => JSON.parse(localStorage.getItem('eatup-inventory') ?? '[]'))
+  const [keepLoggedIn, setKeepLoggedIn] = useState(() => JSON.parse(localStorage.getItem('eatup-keep-logged-in') ?? 'false'))
+  const [isAuthenticated, setIsAuthenticated] = useState(() => JSON.parse(readStoredAuth('eatup-auth', false) ?? 'false'))
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => JSON.parse(readStoredAuth('eatup-session', false) ?? 'null'))
+  const [user, setUser] = useState<UserProfile>(() => JSON.parse(readStoredAuth('eatup-user', false) ?? 'null') ?? defaultUser)
+  const [goals, setGoals] = useState<GoalState>(() => JSON.parse(readStoredAuth('eatup-goals', false) ?? 'null') ?? defaultGoals)
+  const [rewards, setRewards] = useState<RewardState>(() => JSON.parse(readStoredAuth('eatup-rewards', false) ?? 'null') ?? defaultRewards)
+  const [inventory, setInventory] = useState<Ingredient[]>(() => JSON.parse(readStoredAuth('eatup-inventory', false) ?? '[]'))
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(() => JSON.parse(sessionStorage.getItem('eatup-selected-recipe') ?? 'null'))
 
   const value = useMemo(
@@ -80,8 +93,10 @@ export function AppProviders({ children }: PropsWithChildren) {
       setInventory,
       selectedRecipe,
       setSelectedRecipe,
+      keepLoggedIn,
+      setKeepLoggedIn,
     }),
-    [isAuthenticated, authSession, user, goals, rewards, inventory, selectedRecipe],
+    [isAuthenticated, authSession, user, goals, rewards, inventory, selectedRecipe, keepLoggedIn],
   )
 
   useEffect(() => {
@@ -92,36 +107,62 @@ export function AppProviders({ children }: PropsWithChildren) {
     }
   }, [selectedRecipe])
 
+  // Persist keepLoggedIn preference (always in localStorage so it survives browser close)
+  useEffect(() => {
+    localStorage.setItem('eatup-keep-logged-in', JSON.stringify(keepLoggedIn))
+  }, [keepLoggedIn])
+
   useEffect(() => {
     if (!isAuthenticated) {
-      // When signed out, wipe all persisted data to prevent stale restore on back-nav.
+      // When signed out, wipe all persisted data from both storages.
       localStorage.removeItem('eatup-auth')
       localStorage.removeItem('eatup-session')
       localStorage.removeItem('eatup-user')
       localStorage.removeItem('eatup-goals')
       localStorage.removeItem('eatup-rewards')
       localStorage.removeItem('eatup-inventory')
+      sessionStorage.removeItem('eatup-auth')
+      sessionStorage.removeItem('eatup-session')
+      sessionStorage.removeItem('eatup-user')
+      sessionStorage.removeItem('eatup-goals')
+      sessionStorage.removeItem('eatup-rewards')
+      sessionStorage.removeItem('eatup-inventory')
       return
     }
-    localStorage.setItem('eatup-auth', JSON.stringify(isAuthenticated))
-    localStorage.setItem('eatup-session', JSON.stringify(authSession))
-    localStorage.setItem('eatup-user', JSON.stringify(user))
-    localStorage.setItem('eatup-goals', JSON.stringify(goals))
-    localStorage.setItem('eatup-rewards', JSON.stringify(rewards))
-    localStorage.setItem('eatup-inventory', JSON.stringify(inventory))
-  }, [isAuthenticated, authSession, user, goals, rewards, inventory])
+
+    const keys = ['eatup-auth', 'eatup-session', 'eatup-user', 'eatup-goals', 'eatup-rewards', 'eatup-inventory']
+    const values = [isAuthenticated, authSession, user, goals, rewards, inventory]
+
+    if (keepLoggedIn) {
+      // Persist to localStorage (survives browser close)
+      keys.forEach((key, i) => localStorage.setItem(key, JSON.stringify(values[i])))
+      // Clean up sessionStorage
+      keys.forEach((key) => sessionStorage.removeItem(key))
+    } else {
+      // Persist to sessionStorage (cleared on browser close)
+      keys.forEach((key, i) => sessionStorage.setItem(key, JSON.stringify(values[i])))
+      // Clean up localStorage auth data
+      keys.forEach((key) => localStorage.removeItem(key))
+    }
+  }, [isAuthenticated, authSession, user, goals, rewards, inventory, keepLoggedIn])
 
   // ── Session validity check on mount ──
-  // If localStorage says we're authenticated, verify the token is still valid
-  // by making a lightweight API call. If it fails, clean up and redirect to login.
+  // Check both localStorage and sessionStorage for an existing session.
+  // If found, verify the token is still valid by making a lightweight API call.
+  // If it fails, clean up and redirect to login.
   useEffect(() => {
     if (sessionCheckDone.current) return
     sessionCheckDone.current = true
 
     const checkSession = async () => {
-      // Only check if localStorage says authenticated and we have a token
-      const storedAuth = JSON.parse(localStorage.getItem('eatup-auth') ?? 'false') as boolean
-      const storedSession = JSON.parse(localStorage.getItem('eatup-session') ?? 'null') as AuthSession | null
+      // Check both storage locations for an existing session
+      const lsAuth = JSON.parse(localStorage.getItem('eatup-auth') ?? 'false') as boolean
+      const ssAuth = JSON.parse(sessionStorage.getItem('eatup-auth') ?? 'false') as boolean
+      const storedAuth = lsAuth || ssAuth
+
+      const storedSession = lsAuth
+        ? (JSON.parse(localStorage.getItem('eatup-session') ?? 'null') as AuthSession | null)
+        : (JSON.parse(sessionStorage.getItem('eatup-session') ?? 'null') as AuthSession | null)
       if (!storedAuth || !storedSession?.accessToken) return
 
       try {

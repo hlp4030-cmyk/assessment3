@@ -9,12 +9,13 @@ import { SectionContainer } from '../components/ui/SectionContainer.tsx'
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { setIsAuthenticated, setAuthSession, setUser, setGoals } = useAppState()
+  const { setIsAuthenticated, setAuthSession, setUser, setGoals, setKeepLoggedIn } = useAppState()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [keepLoggedInChecked, setKeepLoggedInChecked] = useState(false)
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({})
   const [sessionExpired, setSessionExpired] = useState(false)
 
@@ -83,6 +84,7 @@ export function LoginPage() {
         // Non-blocking: profile may not exist yet. User still proceeds to app.
       }
 
+      setKeepLoggedIn(keepLoggedInChecked)
       setIsAuthenticated(true)
 
       // Returning user flow: go directly to MyFridge.
@@ -159,6 +161,15 @@ export function LoginPage() {
             {touched.password && !passwordValid && password.length > 0 && <p className="mt-1 text-sm text-rose-500">Password must be at least 6 characters.</p>}
             {touched.password && passwordValid && <p className="mt-1 text-sm text-emerald-600">✓ Password meets requirements</p>}
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={keepLoggedInChecked}
+              onChange={(e) => setKeepLoggedInChecked(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Keep me logged in
+          </label>
           {sessionExpired && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
               <p className="text-sm text-amber-700">For your security, please log in again to continue.</p>

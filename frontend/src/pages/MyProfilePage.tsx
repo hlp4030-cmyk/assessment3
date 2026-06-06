@@ -11,7 +11,7 @@ const DIETS: string[] = ['Omnivore', 'Vegetarian', 'Vegan', 'Pescatarian', 'Pref
 
 export function MyProfilePage() {
   const navigate = useNavigate()
-  const { authSession, user, setUser, setIsAuthenticated, setAuthSession } = useAppState()
+  const { authSession, user, setUser, setIsAuthenticated, setAuthSession, keepLoggedIn, setKeepLoggedIn } = useAppState()
 
   const [nickname, setNickname] = useState<string>(user.nickname ?? '')
   const [ageGroup, setAgeGroup] = useState<string>(user.ageRange ?? AGE_GROUPS[1])
@@ -168,9 +168,32 @@ export function MyProfilePage() {
         <div className="mt-6">
           <Button loading={saving} loadingText="Saving..." onClick={onSave}>Save</Button>
         </div>
-        {/* Danger Zone */}
+        {/* Security & Privacy */}
         <div className="mt-10 border-t border-slate-200 pt-6">
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Security & Privacy</h2>
+
+          {/* Keep Me Logged In Toggle */}
+          <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <p className="text-base font-medium text-slate-800">Keep Me Logged In</p>
+              <p className="mt-0.5 text-sm text-slate-500">When disabled, you will be automatically logged out upon closing the browser.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={keepLoggedIn}
+              onClick={() => setKeepLoggedIn((prev) => !prev)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${keepLoggedIn ? 'bg-emerald-600' : 'bg-slate-300'}`}
+            >
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${keepLoggedIn ? 'translate-x-5' : 'translate-x-0'}`}
+              />
+            </button>
+          </div>
+
+          {/* Account Termination */}
+          <h3 className="mt-8 text-sm font-semibold text-red-600 uppercase tracking-wide">Account Termination</h3>
           <p className="mt-1 text-sm text-slate-500">
             Permanently delete your account and all associated data. This action cannot be undone.
           </p>

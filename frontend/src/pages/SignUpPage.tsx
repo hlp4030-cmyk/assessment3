@@ -9,11 +9,12 @@ import { SectionContainer } from '../components/ui/SectionContainer.tsx'
 
 export function SignUpPage() {
   const navigate = useNavigate()
-  const { setIsAuthenticated, setAuthSession, setUser } = useAppState()
+  const { setIsAuthenticated, setAuthSession, setUser, setKeepLoggedIn } = useAppState()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [accepted, setAccepted] = useState(false)
+  const [keepLoggedInChecked, setKeepLoggedInChecked] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -59,6 +60,7 @@ export function SignUpPage() {
         onboardingComplete: false,
       }))
 
+      setKeepLoggedIn(keepLoggedInChecked)
       setIsAuthenticated(true)
       navigate('/onboarding')
     } catch (err) {
@@ -166,6 +168,15 @@ export function SignUpPage() {
             {touched.confirmPassword && !passwordsMatch && confirmPassword.length > 0 && <p className="mt-1 text-sm text-rose-500">Passwords do not match.</p>}
             {touched.confirmPassword && passwordsMatch && <p className="mt-1 text-sm text-emerald-600">✓ Passwords match</p>}
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={keepLoggedInChecked}
+              onChange={(e) => setKeepLoggedInChecked(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Keep me logged in
+          </label>
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={accepted} onChange={(e) => { setAccepted(e.target.checked); setTouched((prev) => ({ ...prev, accepted: true })) }} />
             I accept Terms & Conditions
