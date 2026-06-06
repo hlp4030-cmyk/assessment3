@@ -391,6 +391,35 @@ async def list_all_recipes() -> list[dict[str, Any]]:
     return rows if isinstance(rows, list) else []
 
 
+async def delete_user_account(user_id: str) -> None:
+    """Permanently delete a user via Supabase Auth Admin API.
+
+    Requires the service role key. This will remove the user from
+    ``auth.users`` and any tables with ``ON DELETE CASCADE`` foreign keys
+    (e.g. profiles) will be cleaned up automatically.
+    """
+
+    if not settings.SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(status_code=500, detail="Service role key not configured")
+
+    url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/admin/users/{user_id}"
+    headers = {
+        "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.delete(url, headers=headers)
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except Exception:
+            detail = {"message": response.text}
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+
 async def update_profile_goal_fields(
     access_token: str,
     user_id: str,

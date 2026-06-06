@@ -326,6 +326,20 @@ export async function deleteQuickAddSettingAPI(accessToken: string, ingredientNa
   }
 }
 
+export async function deleteAccount(accessToken: string): Promise<void> {
+  const response = await fetch(`${BACKEND_BASE_URL}/auth/account`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  const data = (await response.json()) as { status?: string; detail?: unknown }
+  if (!response.ok) {
+    throw new Error(extractErrorMessage(data.detail, 'Failed to delete account'))
+  }
+}
+
 export async function markItemWasted(accessToken: string, itemId: string): Promise<WasteResponse> {
   const response = await fetch(`${BACKEND_BASE_URL}/fridge/me/${itemId}/waste`, {
     method: 'PATCH',

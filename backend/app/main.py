@@ -28,6 +28,7 @@ from .supabase_auth import (
     create_fridge_item,
     delete_fridge_item,
     delete_quick_add_setting,
+    delete_user_account,
     get_auth_user,
     get_fridge_item_by_id,
     get_user_profile,
@@ -107,6 +108,15 @@ async def _resolve_user_id_from_auth_header(authorization: str | None) -> tuple[
     if not user_id:
         raise HTTPException(status_code=401, detail="Unable to resolve authenticated user")
     return access_token, user_id
+
+
+@app.delete("/auth/account")
+async def delete_account(authorization: str | None = Header(default=None)) -> dict[str, str]:
+    """Permanently delete the authenticated user's account and all related data."""
+
+    _, user_id = await _resolve_user_id_from_auth_header(authorization)
+    await delete_user_account(user_id)
+    return {"status": "deleted"}
 
 
 @app.get("/profile/me", response_model=ProfileResponse)
