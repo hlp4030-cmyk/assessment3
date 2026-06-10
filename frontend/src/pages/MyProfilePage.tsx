@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SectionContainer } from '../components/ui/SectionContainer.tsx'
 import { Card } from '../components/ui/Card.tsx'
 import { Button } from '../components/ui/Button.tsx'
 import { deleteAccount, getMyProfile, upsertMyProfile } from '../lib/backendApi.ts'
 import { useAppState } from '../context/useAppState.ts'
+import { PrivacyPolicyModal } from '../components/ui/PrivacyPolicyModal.tsx'
 
 const AGE_GROUPS = ['18-24', '25-34', '35-44', '45-54', '55+', 'Prefer not to say']
 const DIETS: string[] = ['Omnivore', 'Vegetarian', 'Vegan', 'Pescatarian', 'Prefer not to say']
@@ -22,6 +23,10 @@ export function MyProfilePage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string>('')
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
+
+  const handleOpenPrivacy = useCallback(() => setShowPrivacyPolicy(true), [])
+  const handleClosePrivacy = useCallback(() => setShowPrivacyPolicy(false), [])
 
   // Load current profile data on mount if available
   useEffect(() => {
@@ -168,6 +173,17 @@ export function MyProfilePage() {
         <div className="mt-6">
           <Button loading={saving} loadingText="Saving..." onClick={onSave}>Save</Button>
         </div>
+        {/* View Privacy Policy */}
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={handleOpenPrivacy}
+            className="text-sm font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 transition-colors duration-150"
+          >
+            View Privacy Policy
+          </button>
+        </div>
+
         {/* Security & Privacy */}
         <div className="mt-10 border-t border-slate-200 pt-6">
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Security & Privacy</h2>
@@ -208,6 +224,7 @@ export function MyProfilePage() {
           </button>
         </div>
       </Card>
+      <PrivacyPolicyModal isOpen={showPrivacyPolicy} onClose={handleClosePrivacy} />
     </SectionContainer>
   )
 }

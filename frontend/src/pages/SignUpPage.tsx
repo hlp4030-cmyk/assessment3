@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAppState } from '../context/useAppState.ts'
@@ -6,6 +6,7 @@ import { signup } from '../lib/backendApi.ts'
 import { Button } from '../components/ui/Button.tsx'
 import { Card } from '../components/ui/Card.tsx'
 import { SectionContainer } from '../components/ui/SectionContainer.tsx'
+import { PrivacyPolicyModal } from '../components/ui/PrivacyPolicyModal.tsx'
 
 export function SignUpPage() {
   const navigate = useNavigate()
@@ -20,6 +21,10 @@ export function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean; confirmPassword?: boolean; accepted?: boolean }>({})
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
+
+  const handleOpenPrivacy = useCallback(() => setShowPrivacyPolicy(true), [])
+  const handleClosePrivacy = useCallback(() => setShowPrivacyPolicy(false), [])
 
   const emailValid = /\S+@\S+\.\S+/.test(email)
   const passwordValid = password.length >= 6
@@ -186,7 +191,14 @@ export function SignUpPage() {
           <Button full disabled={isSubmitting}>{isSubmitting ? 'Creating account...' : 'Create account'}</Button>
         </form>
         <Link to="/welcome" className="mt-4 inline-block"><Button variant="ghost">Back</Button></Link>
+        <p className="mt-4 text-center text-sm text-slate-500">
+          By continuing, you agree to our{' '}
+          <button type="button" onClick={handleOpenPrivacy} className="font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 transition-colors duration-150">
+            Privacy and Policy
+          </button>
+        </p>
       </Card>
+      <PrivacyPolicyModal isOpen={showPrivacyPolicy} onClose={handleClosePrivacy} />
       </div>
     </SectionContainer>
   )

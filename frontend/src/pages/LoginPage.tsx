@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAppState } from '../context/useAppState.ts'
@@ -6,6 +6,7 @@ import { getMyProfile, login } from '../lib/backendApi.ts'
 import { Button } from '../components/ui/Button.tsx'
 import { Card } from '../components/ui/Card.tsx'
 import { SectionContainer } from '../components/ui/SectionContainer.tsx'
+import { PrivacyPolicyModal } from '../components/ui/PrivacyPolicyModal.tsx'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -18,6 +19,10 @@ export function LoginPage() {
   const [keepLoggedInChecked, setKeepLoggedInChecked] = useState(false)
   const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({})
   const [sessionExpired, setSessionExpired] = useState(false)
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
+
+  const handleOpenPrivacy = useCallback(() => setShowPrivacyPolicy(true), [])
+  const handleClosePrivacy = useCallback(() => setShowPrivacyPolicy(false), [])
 
   // Check for session expiry flag set by AppProviders
   useEffect(() => {
@@ -178,8 +183,15 @@ export function LoginPage() {
           {error && <p className="text-sm text-rose-600">{error}</p>}
           <Button full disabled={isSubmitting}>{isSubmitting ? 'Signing in...' : 'Continue'}</Button>
         </form>
-        <Link to="/welcome" className="mt-4 inline-block"><Button variant="ghost">Back</Button></Link>
+      <Link to="/welcome" className="mt-4 inline-block"><Button variant="ghost">Back</Button></Link>
+        <p className="mt-4 text-center text-sm text-slate-500">
+          By continuing, you agree to our{' '}
+          <button type="button" onClick={handleOpenPrivacy} className="font-medium text-emerald-600 underline underline-offset-2 hover:text-emerald-700 transition-colors duration-150">
+            Privacy and Policy
+          </button>
+        </p>
       </Card>
+      <PrivacyPolicyModal isOpen={showPrivacyPolicy} onClose={handleClosePrivacy} />
       </div>
     </SectionContainer>
   )
