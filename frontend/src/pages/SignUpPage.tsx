@@ -27,7 +27,8 @@ export function SignUpPage() {
   const handleClosePrivacy = useCallback(() => setShowPrivacyPolicy(false), [])
 
   const emailValid = /\S+@\S+\.\S+/.test(email)
-  const passwordValid = password.length >= 6
+  const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/
+  const passwordValid = passwordRegex.test(password)
   const passwordsMatch = password === confirmPassword && confirmPassword.length > 0
 
   const onSubmit = async (event: FormEvent) => {
@@ -35,7 +36,7 @@ export function SignUpPage() {
     setError('')
 
     if (!emailValid) return setError('Please enter a valid email.')
-    if (!passwordValid) return setError('Password must be at least 6 characters.')
+    if (!passwordValid) return setError('Password must be at least 8 characters and include letters, numbers, and special characters.')
     if (!passwordsMatch) return setError('Passwords do not match.')
     if (!accepted) return setError('Please accept Terms & Conditions.')
 
@@ -112,7 +113,7 @@ export function SignUpPage() {
               <input
                 className={`w-full rounded-2xl border bg-slate-50 p-4 pr-12 text-lg ${touched.password ? (passwordValid ? 'border-emerald-400' : 'border-rose-400') : 'border-slate-200'}`}
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Password (minimum 6 chars)"
+                placeholder="Password (min 8 chars: letters, numbers, special)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
@@ -137,7 +138,7 @@ export function SignUpPage() {
                 </svg>
               </button>
             </div>
-            {touched.password && !passwordValid && password.length > 0 && <p className="mt-1 text-sm text-rose-500">Password must be at least 6 characters.</p>}
+            {touched.password && !passwordValid && password.length > 0 && <p className="mt-1 text-sm text-rose-500">Password must be at least 8 characters and include letters, numbers, and special characters (!@#$ etc.).</p>}
             {touched.password && passwordValid && <p className="mt-1 text-sm text-emerald-600">✓ Password meets requirements</p>}
           </div>
           <div>

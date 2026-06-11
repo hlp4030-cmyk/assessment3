@@ -33,14 +33,14 @@ export function LoginPage() {
   }, [])
 
   const emailValid = /\S+@\S+\.\S+/.test(email)
-  const passwordValid = password.length >= 6
+  const passwordValid = password.length >= 8
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
 
     if (!emailValid || !passwordValid) {
-      setError('Please enter a valid email and password (minimum 6 characters).')
+      setError('Please enter a valid email and password (minimum 8 characters).')
       return
     }
 
@@ -138,7 +138,7 @@ export function LoginPage() {
               <input
                 className={`w-full rounded-2xl border bg-slate-50 p-4 pr-12 text-lg ${touched.password ? (passwordValid ? 'border-emerald-400' : 'border-rose-400') : 'border-slate-200'}`}
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Password (min 6 chars)"
+                placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
@@ -163,7 +163,7 @@ export function LoginPage() {
                 </svg>
               </button>
             </div>
-            {touched.password && !passwordValid && password.length > 0 && <p className="mt-1 text-sm text-rose-500">Password must be at least 6 characters.</p>}
+            {touched.password && !passwordValid && password.length > 0 && <p className="mt-1 text-sm text-rose-500">Password must be at least 8 characters and include letters, numbers, and special characters.</p>}
             {touched.password && passwordValid && <p className="mt-1 text-sm text-emerald-600">✓ Password meets requirements</p>}
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700">
